@@ -61,6 +61,57 @@ namespace Gunsmith.Workshop
         }
 
         public bool Remove(string id) => id != null && _designs.Remove(id);
+
+        /// <summary>
+        /// Copies a saved design so one thing can be changed on the copy.
+        ///
+        /// THIS IS THE MOST IMPORTANT AFFORDANCE IN THE GAME and it is nearly free.
+        /// If changing one variable costs one click and changing three costs nine, a
+        /// player naturally runs controlled experiments and learns causality fast. If
+        /// changing everything is equally easy they change everything at once and learn
+        /// nothing. Keep duplicate cheaper than editing in place, always.
+        ///
+        /// The copy is NOT re-baked lazily — it bakes here, so the duplicate is
+        /// immediately loadable and the player never hits a half-made design.
+        /// </summary>
+        /// <returns>The new design, or null if the source does not exist.</returns>
+        public SavedDesign Duplicate(string sourceId, in Barrel barrel, int day)
+        {
+            var source = Get(sourceId);
+            if (source == null) return null;
+
+            // CartridgeDesign is a struct, so this is already a deep copy of every
+            // dimension and material choice.
+            return Save(NextIdFrom(source.Id), NextNameFrom(source.Name), source.Design, barrel, day);
+        }
+
+        /// <summary>An unused id derived from the original.</summary>
+        private string NextIdFrom(string id)
+        {
+            for (int n = 2; n < 1000; n++)
+            {
+                string candidate = $"{id}_{n}";
+                if (!_designs.ContainsKey(candidate)) return candidate;
+            }
+
+            return $"design_{_nextId++}";
+        }
+
+        /// <summary>
+        /// "Brass Nose" becomes "Brass Nose Mk2"; "Brass Nose Mk2" becomes "Mk3".
+        /// A gunsmith numbers their attempts, and the numbering is what makes a rack of
+        /// recovered bullets legible later.
+        /// </summary>
+        private static string NextNameFrom(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "Mk2";
+
+            int mark = name.LastIndexOf("Mk", StringComparison.OrdinalIgnoreCase);
+            if (mark >= 0 && int.TryParse(name.Substring(mark + 2).Trim(), out int number))
+                return $"{name.Substring(0, mark).TrimEnd()} Mk{number + 1}".Trim();
+
+            return $"{name} Mk2";
+        }
     }
 
     /// <summary>Outcome of a crafting attempt.</summary>

@@ -106,6 +106,11 @@ changing three is nine clicks, players naturally run controlled experiments and 
 causality fast. If changing everything is equally easy, they change everything and
 learn nothing. Highest-value UX feature in the game, and nearly free to build.
 
+**Built** — `DesignLibrary.Duplicate` / `GunsmithGame.DuplicateDesign`. The copy is baked
+on creation so it is immediately loadable, and it names itself: "Brass Nose" becomes
+"Brass Nose Mk2", then Mk3. That numbering is what makes a rack of recovered bullets
+readable weeks later. **Keep duplicating cheaper than editing in place, always.**
+
 ### 6. Briefs in the customer's words, never engineering terms
 
 A house guard says he works in crowds. He never says "sub-30 cm penetration, no
@@ -162,15 +167,21 @@ Sliders in a panel feel like tax software. Freehand-drawing the case was conside
 **rejected** — fiddly, imprecise, and it fights the parametric system that makes the
 whole thing work. Instead the numbers live **on the tools, diegetically**:
 
-- **Powder on a beam balance.** Set the counterweight, trickle powder until the beam
-  tips. Teaches "this much powder" as a felt quantity. The number is on the scale,
-  where a number belongs. *Not built yet.*
+- **Powder on a beam balance.** Slide the poise to the charge you want, then trickle
+  until the beam comes level. **Built** — `PowderBalance`. The moment balance is linear
+  in poise position, which is why a real powder beam is evenly divided and why sliding
+  a poise is a legitimate way to dial a number without a text field. The beam saturates
+  against its stops within about a tenth of a grain, and that near-binary swing is the
+  feel. The scale hands over **what was actually weighed**, not what was dialled.
 - **The bullet is turned on a lathe**, live mesh reshaping as you work. **Built** —
   `LatheStation` plus `LatheHandle`, one handle per dimension.
 - **Weigh the finished bullet.** One number, on a scale — the one that matters most.
-  **Built**, and it is the only number the bench displays.
+  **Built.**
 - **Seat the bullet against a physical stop**, so seating depth is set on a tool.
-  *Not built yet.*
+  **Built** — `SeatingStop`. This is not set dressing: powder burns in the space behind
+  the bullet and pressure goes roughly as the inverse of that volume, so seating deeper
+  is the sharpest pressure lever on the bench. `Seating_Deeper_Raises_Peak_Pressure`
+  guards it — if that ever stops holding, the die has become decoration.
 
 **One handle moves one dimension, and that is load-bearing.** If changing one variable
 is one drag and changing three is three drags, players run controlled experiments and
@@ -224,6 +235,14 @@ raycasts, fully decoupled from Unity's physics loop and deterministic.
 
 **Doubles inside the solver, floats at the Unity boundary.** The interior-ballistics ODE
 is stiff near peak pressure and float32 visibly drifts there.
+
+This has now been violated twice the same way, both times caught by a test, so it is
+worth naming the trap: **a serialised Unity field defaults to `float`, and if a solver
+input is computed from it, the float's imprecision lands in the physics.** A `float`
+beam length made a 6-grain charge weigh 6.0000001 grains; `Mathf.Deg2Rad` made a
+20-degree boattail 20.000000078 degrees. Neither mattered visually and both were real
+noise on a solver input. If a field feeds a number the solvers read, declare it
+`double` and cast to `float` only when assigning to a transform.
 
 **Bake at design time, look up at runtime.** Drag and pressure curves depend only on
 shape, which doesn't change in flight. Baking is the real performance win, not
@@ -386,11 +405,12 @@ path.
   transparent block, witness card with a round hole or an oval slot, recovered slug or
   a tray of fragments. Entry face at local z = 0, depth running along **-Z**.
 
-**Verified.** **101/101 in Unity, 61/61 outside.** Six of those are winding and bounds
-tests on the generalised lathe, including the mushroom shoulder — two profile points at
-the same station, which lathes into a flat annulus and is the case a naive meridian
-normal gets wrong. Blocks have also been looked at in a running scene: the silhouettes
-are distinct and read correctly at a glance.
+**Verified.** Six tests cover winding and bounds on the generalised lathe, including the
+mushroom shoulder — two profile points at the same station, which lathes into a flat
+annulus and is the case a naive meridian normal gets wrong. Blocks have also been looked
+at in a running scene: the silhouettes are distinct and read correctly at a glance.
+(Suite totals live in **Verification practice** above; do not restate them here, or they
+go stale in two places at once.)
 
 `Ballistics → Spawn Gel Block Preview` fires the five reference rounds into blocks and
 lines them up, which is the evidence rack the design calls for. `Clear Gel Block
@@ -403,7 +423,13 @@ started with.
 
 **Keep it that way.** Preview objects spawn into the open scene and are disposable: run
 `Ballistics → Clear …Preview` and `Gunsmith → Clear Lathe Bench` before saving, and never
-let one reach a commit. The vertical slice scene itself is still the user's to build by
+let one reach a commit.
+
+**Running the PlayMode suite saves the open scene for you.** Entering play mode writes
+the scene to disk, so anything spawned into it lands in the file with nobody pressing
+save — this is how ~2900 lines of bench got into `SampleScene`. Clear the previews
+*before* a PlayMode run, not just before a manual save, and check
+`git diff --stat Assets/Scenes` afterwards. The vertical slice scene itself is still the user's to build by
 hand.
 
 **The lathe is open at `Gunsmith → Open Lathe Bench`.** Drag the coloured handles — with

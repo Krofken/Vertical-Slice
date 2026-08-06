@@ -1,5 +1,6 @@
 using Gunsmith.Crafting;
 using Krofken.Ballistics;
+using Krofken.Ballistics.UnityIntegration;
 using UnityEditor;
 using UnityEngine;
 
@@ -90,6 +91,9 @@ namespace Gunsmith.EditorTools
             // viewer because they are not under the rig.
             rig.localRotation = Quaternion.Euler(0f, -90f, 0f);
 
+            BuildBalance(root.transform, station);
+            BuildSeatingDie(root.transform, station);
+
             station.Rebuild();
 
             Selection.activeGameObject = root;
@@ -141,6 +145,107 @@ namespace Gunsmith.EditorTools
             text.alignment = TextAlignment.Center;
 
             return text;
+        }
+
+        /// <summary>
+        /// The powder scale, to the left of the lathe. The poise slides on the beam and
+        /// the beam tips as powder goes in the pan; the engraving under the poise is the
+        /// setting, not the contents.
+        /// </summary>
+        private static void BuildBalance(Transform parent, LatheStation station)
+        {
+            var root = new GameObject("Powder Balance");
+            root.transform.SetParent(parent, false);
+            root.transform.localPosition = new Vector3(-0.75f, 0f, 0f);
+
+            var balance = root.AddComponent<PowderBalance>();
+            balance.BeamTravel = 0.30;
+            balance.MaxSettingGrains = 12.0;
+
+            // The beam pivots on a knife edge. Everything hangs off this transform, so
+            // rotating it tips the whole assembly the way a real beam does.
+            var beam = new GameObject("Beam").transform;
+            beam.SetParent(root.transform, false);
+            balance.Beam = beam;
+
+            var bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            bar.name = "Bar";
+            bar.transform.SetParent(beam, false);
+            bar.transform.localPosition = new Vector3(0.10f, 0f, 0f);
+            bar.transform.localScale = new Vector3(0.44f, 0.012f, 0.012f);
+            bar.GetComponent<MeshRenderer>().sharedMaterial = Solid(new Color(0.62f, 0.64f, 0.68f));
+
+            var poise = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            poise.name = "Poise";
+            poise.transform.SetParent(beam, false);
+            poise.transform.localScale = new Vector3(0.022f, 0.05f, 0.05f);
+            poise.GetComponent<MeshRenderer>().sharedMaterial = Solid(new Color(0.90f, 0.75f, 0.30f));
+            balance.Poise = poise.transform;
+
+            var pan = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            pan.name = "Pan";
+            pan.transform.SetParent(beam, false);
+            pan.transform.localPosition = new Vector3(-0.13f, -0.05f, 0f);
+            pan.transform.localScale = new Vector3(0.10f, 0.012f, 0.10f);
+            pan.GetComponent<MeshRenderer>().sharedMaterial = Solid(new Color(0.55f, 0.58f, 0.62f));
+            balance.Pan = pan.transform;
+
+            balance.BeamReadout = AddLabel(root.transform, "Beam readout",
+                new Vector3(0.10f, -0.16f, 0f), 0.010f, new Color(0.95f, 0.92f, 0.80f), TextAnchor.UpperCenter);
+
+            // A charge that suits the default load, already trickled, so the beam is
+            // level when the bench opens rather than sitting on its stop.
+            balance.SettingGrains = 5.5;
+            balance.Trickle(5.5);
+        }
+
+        /// <summary>
+        /// The seating die, to the right. The stop sets how deep the bullet goes; the
+        /// readout is depth and cartridge overall length, both of them measurements.
+        /// </summary>
+        private static void BuildSeatingDie(Transform parent, LatheStation station)
+        {
+            var root = new GameObject("Seating Die");
+            root.transform.SetParent(parent, false);
+            root.transform.localPosition = new Vector3(0.75f, 0f, 0f);
+
+            var die = root.AddComponent<SeatingStop>();
+            die.Projectile = station.Geometry;
+
+            var rig = new GameObject("Rig").transform;
+            rig.SetParent(root.transform, false);
+            rig.localScale = Vector3.one * DisplayScale;
+            rig.localRotation = Quaternion.Euler(0f, -90f, 0f);
+
+            var casing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            casing.name = "Case";
+            casing.transform.SetParent(rig, false);
+            // Unity's cylinder is 2 units tall and stands on Y, so half the length and
+            // a quarter turn puts it along the die's axis.
+            casing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            casing.transform.localPosition = new Vector3(0f, 0f, -(float)(die.CaseLength * 0.5));
+            casing.transform.localScale = new Vector3(0.0095f, (float)(die.CaseLength * 0.5), 0.0095f);
+            casing.GetComponent<MeshRenderer>().sharedMaterial = Solid(new Color(0.72f, 0.60f, 0.25f));
+
+            // The real projectile, lathed from the same geometry the lathe is turning.
+            var bullet = new GameObject("Bullet");
+            bullet.transform.SetParent(rig, false);
+            bullet.AddComponent<MeshFilter>().sharedMesh =
+                ProjectileMeshBuilder.Create(die.Projectile, 24, 24, 0.0);
+            bullet.AddComponent<MeshRenderer>().sharedMaterial = Solid(new Color(0.78f, 0.62f, 0.34f));
+            die.SeatedBullet = bullet.transform;
+
+            var stop = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            stop.name = "Stop";
+            stop.transform.SetParent(rig, false);
+            stop.transform.localScale = new Vector3(0.011f, 0.011f, 0.0012f);
+            stop.GetComponent<MeshRenderer>().sharedMaterial = Solid(new Color(0.85f, 0.35f, 0.35f));
+            die.Stop = stop.transform;
+
+            die.DepthReadout = AddLabel(root.transform, "Die readout",
+                new Vector3(0f, -0.16f, 0f), 0.008f, new Color(0.95f, 0.92f, 0.80f), TextAnchor.UpperCenter);
+
+            die.Depth = 0.0030;
         }
 
         private static Material Solid(Color colour)

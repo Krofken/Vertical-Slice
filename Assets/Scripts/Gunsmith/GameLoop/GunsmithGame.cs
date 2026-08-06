@@ -336,5 +336,13 @@ namespace Gunsmith.GameLoop
         /// <summary>Convenience: save a design against the reference barrel.</summary>
         public SavedDesign SaveDesign(string id, string name, in CartridgeDesign design)
             => Designs.Save(id, name, design, ReferenceBarrel, Day);
+
+        /// <summary>
+        /// Copies a saved design so the player can change one thing and test the
+        /// difference. Bind this to a one-click action wherever loads are listed —
+        /// it must always be cheaper than editing a design in place.
+        /// </summary>
+        public SavedDesign DuplicateDesign(SavedDesign source)
+            => source == null ? null : Designs.Duplicate(source.Id, ReferenceBarrel, Day);
     }
 }
