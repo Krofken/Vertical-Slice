@@ -164,11 +164,20 @@ whole thing work. Instead the numbers live **on the tools, diegetically**:
 
 - **Powder on a beam balance.** Set the counterweight, trickle powder until the beam
   tips. Teaches "this much powder" as a felt quantity. The number is on the scale,
-  where a number belongs.
-- **The bullet is turned on a lathe**, live mesh reshaping as you work. The runtime
-  lathe already regenerates fast enough to run on a slider drag.
+  where a number belongs. *Not built yet.*
+- **The bullet is turned on a lathe**, live mesh reshaping as you work. **Built** —
+  `LatheStation` plus `LatheHandle`, one handle per dimension.
 - **Weigh the finished bullet.** One number, on a scale — the one that matters most.
+  **Built**, and it is the only number the bench displays.
 - **Seat the bullet against a physical stop**, so seating depth is set on a tool.
+  *Not built yet.*
+
+**One handle moves one dimension, and that is load-bearing.** If changing one variable
+is one drag and changing three is three drags, players run controlled experiments and
+learn causality. `Each_Cut_Changes_Only_Its_Own_Dimension` asserts it across every
+operation, allowing only couplings that are real constraints of the shape — a cavity
+cannot be wider than the meplat it opens onto, or deeper than the nose containing it.
+Anything else leaking between handles is a bug.
 
 ## Pacing and economy
 
@@ -266,7 +275,7 @@ unstable, and ruinously expensive.
 
 ## Verification practice
 
-All three suites stay green: **101/101 EditMode and 3/3 PlayMode in Unity, 61/61
+All three suites stay green: **108/108 EditMode and 3/3 PlayMode in Unity, 61/61
 outside** via `dotnet test`. The outside-Unity run is what proves the core is still
 portable to the other project — if it breaks, a Unity dependency leaked into the core.
 
@@ -393,8 +402,14 @@ have been cleared. It now holds only the camera, directional light and global vo
 started with.
 
 **Keep it that way.** Preview objects spawn into the open scene and are disposable: run
-both `Ballistics → Clear …Preview` items before saving, and never let one reach a commit.
-The vertical slice scene itself is still the user's to build by hand.
+`Ballistics → Clear …Preview` and `Gunsmith → Clear Lathe Bench` before saving, and never
+let one reach a commit. The vertical slice scene itself is still the user's to build by
+hand.
+
+**The lathe is open at `Gunsmith → Open Lathe Bench`.** Drag the coloured handles — with
+the mouse in play mode, or with the move gizmo in edit mode, since `LatheStation` is
+`[ExecuteAlways]`. The mesh is generated at true size; only the rig transform is scaled
+up, so nothing a solver reads is touched.
 
 ---
 
