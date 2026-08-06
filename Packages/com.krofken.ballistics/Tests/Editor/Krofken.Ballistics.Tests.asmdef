@@ -1,0 +1,19 @@
+{
+    "name": "Krofken.Ballistics.Tests",
+    "rootNamespace": "Krofken.Ballistics.Tests",
+    "references": [
+        "Krofken.Ballistics",
+        "Krofken.Ballistics.Unity",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [ "Editor" ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [ "nunit.framework.dll" ],
+    "autoReferenced": false,
+    "defineConstraints": [ "UNITY_INCLUDE_TESTS" ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

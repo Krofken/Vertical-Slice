@@ -1,0 +1,18 @@
+{
+    "name": "Gunsmith.Editor",
+    "rootNamespace": "Gunsmith.EditorTools",
+    "references": [
+        "Gunsmith",
+        "Krofken.Ballistics",
+        "Krofken.Ballistics.Unity"
+    ],
+    "includePlatforms": [ "Editor" ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
