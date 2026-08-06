@@ -372,9 +372,15 @@ are distinct and read correctly at a glance.
 lines them up, which is the evidence rack the design calls for. `Clear Gel Block
 Preview` removes them.
 
-**Loose end:** the gel block preview objects are sitting unsaved in `SampleScene`. Don't
-save that scene, or run `Ballistics → Clear Gel Block Preview`. (The older projectile
-preview objects have been cleared.)
+**Loose end — `SampleScene` is dirty on disk.** The first session's note said its preview
+objects were unsaved. They were not: `~ProjectilePreview` and its five bullets are
+committed into the scene file, about 2000 lines of it. They have since been cleared from
+the Editor's in-memory copy, and the gel block preview now sits there unsaved instead, so
+the file and the Editor disagree.
+
+The scene is deliberately **excluded from version control history** until it is cleaned.
+To fix: run both `Ballistics → Clear …Preview` items, save once, then commit the scene.
+Preview objects are throwaway — never let them reach a commit.
 
 ---
 
