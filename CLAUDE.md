@@ -387,15 +387,14 @@ are distinct and read correctly at a glance.
 lines them up, which is the evidence rack the design calls for. `Clear Gel Block
 Preview` removes them.
 
-**Loose end — `SampleScene` is dirty on disk.** The first session's note said its preview
-objects were unsaved. They were not: `~ProjectilePreview` and its five bullets are
-committed into the scene file, about 2000 lines of it. They have since been cleared from
-the Editor's in-memory copy, and the gel block preview now sits there unsaved instead, so
-the file and the Editor disagree.
+**`SampleScene` is clean and tracked.** It had picked up `~ProjectilePreview` and its
+five bullets — roughly 2000 lines of throwaway objects saved into it by accident — which
+have been cleared. It now holds only the camera, directional light and global volume it
+started with.
 
-The scene is deliberately **excluded from version control history** until it is cleaned.
-To fix: run both `Ballistics → Clear …Preview` items, save once, then commit the scene.
-Preview objects are throwaway — never let them reach a commit.
+**Keep it that way.** Preview objects spawn into the open scene and are disposable: run
+both `Ballistics → Clear …Preview` items before saving, and never let one reach a commit.
+The vertical slice scene itself is still the user's to build by hand.
 
 ---
 
