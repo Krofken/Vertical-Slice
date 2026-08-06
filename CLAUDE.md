@@ -266,9 +266,14 @@ unstable, and ruinously expensive.
 
 ## Verification practice
 
-Both suites stay green: **101/101 in Unity, 61/61 outside** via `dotnet test`. The
-outside-Unity run is what proves the core is still portable to the other project — if it
-breaks, a Unity dependency leaked into the core.
+All three suites stay green: **101/101 EditMode and 3/3 PlayMode in Unity, 61/61
+outside** via `dotnet test`. The outside-Unity run is what proves the core is still
+portable to the other project — if it breaks, a Unity dependency leaked into the core.
+
+PlayMode results are not reported through `ICallbacks` reliably, because entering play
+mode reloads the domain and drops the callback. Read
+`%USERPROFILE%\AppData\LocalLow\DefaultCompany\Vertical Slice\TestResults.xml` instead —
+it is written by both suites, so note its timestamp before starting a run.
 
 **Driving the Editor over MCP.** `Unity_RunCommand` sandboxes `System.Reflection` and
 the dynamic command assembly cannot see the project's own types — so verify by writing
@@ -342,9 +347,19 @@ on purpose — shipping them as presets would be shipping the answers.
 ## Current state
 
 Physics core, Unity adapter, orders, economy, crafting, range, notebook and day cycle
-are all built and green. `ProjectileSimulator` is written and tested for compile but has
-**never had a projectile actually flown through it in a running scene** — it needs
-colliders, so make it the first thing to check when the range scene exists.
+are all built and green.
+
+**`ProjectileSimulator` has now been flown.** It was previously compile-tested only. A
+PlayMode suite (`Tests/Runtime`) fires a real round at a real collider 25 m downrange and
+checks it arrives, arrives about when its speed says it should, loses some speed but not
+all of it to drag, hits close to square, and **drops** rather than rises. That last one
+matters: the simulation-frame-to-Unity conversion happens only inside this component, so
+a sign error there is invisible to every EditMode test.
+
+PlayMode tests are the right tool whenever behaviour depends on `Update`, PhysX queries
+or the coordinate conversion. Keep them fast — do not write one that waits out
+`maxFlightTime` (15 s) in real time; launch slow instead if what you want is the expiry
+path.
 
 **The gel block is built.** Four pieces landed:
 
