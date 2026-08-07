@@ -114,6 +114,13 @@ namespace Gunsmith.Interaction
         [Tooltip("Where the prompt is drawn. Sits just in front of the eyes.")]
         public TextMesh Prompt;
 
+        [Tooltip("Dark plate drawn behind the prompt so it reads against a lit wall, a " +
+                 "brass case or a highlighted object. Sized to the text automatically.")]
+        public Transform PromptBacking;
+
+        [Tooltip("Margin around the caption text, metres at the prompt's own distance.")]
+        public Vector2 PromptPadding = new Vector2(0.045f, 0.022f);
+
         [Tooltip("Fraction of the screen width the prompt may occupy at most.")]
         [Range(0.1f, 0.9f)]
         public float PromptWidthFraction = 0.42f;
@@ -153,7 +160,15 @@ namespace Gunsmith.Interaction
         private void FitPrompt()
         {
             if (Prompt == null || _camera == null) return;
-            if (string.IsNullOrEmpty(Prompt.text)) return;
+
+            // Nothing to caption: hide the plate too, or a dark rectangle floats in
+            // front of the player's face whenever they are looking at nothing.
+            if (string.IsNullOrEmpty(Prompt.text))
+            {
+                if (PromptBacking != null && PromptBacking.gameObject.activeSelf)
+                    PromptBacking.gameObject.SetActive(false);
+                return;
+            }
 
             if (!_promptRestKnown)
             {
@@ -174,6 +189,45 @@ namespace Gunsmith.Interaction
             TextFit.Fit(Prompt,
                 new Vector2(visibleWidth * PromptWidthFraction, visibleHeight * PromptHeightFraction),
                 margin: 1f);
+
+            SizeBackingPlate();
+        }
+
+        /// <summary>
+        /// Stretches the plate to whatever the caption ended up measuring.
+        ///
+        /// Has to run AFTER the fit, and every frame: the text changes with what you are
+        /// looking at, and its size changes again as the field of view narrows while you
+        /// lean into a station. A fixed-size plate would clip a long prompt and hang off
+        /// the end of a short one.
+        /// </summary>
+        private void SizeBackingPlate()
+        {
+            if (PromptBacking == null) return;
+
+            var textRenderer = Prompt.GetComponent<Renderer>();
+            if (textRenderer == null) return;
+
+            if (!PromptBacking.gameObject.activeSelf) PromptBacking.gameObject.SetActive(true);
+
+            var parent = PromptBacking.parent;
+            Vector3 size = textRenderer.bounds.size;
+
+            // The head is unscaled, so world extents are usable as local ones directly.
+            PromptBacking.localScale = new Vector3(
+                size.x + PromptPadding.x,
+                size.y + PromptPadding.y,
+                1f);
+
+            // Centred on the text and nudged behind it, so the text always wins the
+            // depth test against its own backing.
+            Vector3 centre = parent != null
+                ? parent.InverseTransformPoint(textRenderer.bounds.center)
+                : textRenderer.bounds.center;
+
+            centre.z = Prompt.transform.localPosition.z + 0.004f;
+            PromptBacking.localPosition = centre;
+            PromptBacking.localRotation = Quaternion.identity;
         }
 
         private void Update()

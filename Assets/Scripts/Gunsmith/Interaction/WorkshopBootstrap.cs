@@ -155,12 +155,33 @@ namespace Gunsmith.Interaction
             var text = prompt.AddComponent<TextMesh>();
             text.characterSize = 0.028f;
             text.fontSize = 72;
-            text.color = new Color(0.97f, 0.95f, 0.88f);
+            text.color = new Color(0.99f, 0.98f, 0.95f);
             text.anchor = TextAnchor.MiddleCenter;
             text.alignment = TextAlignment.Center;
 
+            // A dark plate behind the caption.
+            //
+            // The prompt is pale cream and so is Interactable.HighlightTint, so the
+            // moment you looked at something the text was drawn in nearly its own
+            // colour and became unreadable. Tinting one of them differently would only
+            // move the problem — the caption also crosses the wall, the bench, a brass
+            // case and the sky. A plate makes it legible against all of them.
+            var plate = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            plate.name = "Prompt backing";
+            plate.transform.SetParent(head, false);
+
+            // Nothing should ever collide with a caption, least of all the interaction
+            // ray that draws it.
+            var plateCollider = plate.GetComponent<Collider>();
+            if (Application.isPlaying) Destroy(plateCollider); else DestroyImmediate(plateCollider);
+
+            plate.GetComponent<MeshRenderer>().sharedMaterial =
+                WorkshopPalette.Translucent(new Color(0.05f, 0.05f, 0.07f, 0.66f));
+            Disposable(plate);
+
             var interactor = head.gameObject.AddComponent<PlayerInteractor>();
             interactor.Prompt = text;
+            interactor.PromptBacking = plate.transform;
 
             return rig;
         }
