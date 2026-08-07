@@ -52,25 +52,40 @@ namespace Gunsmith.Tests
         {
             foreach (var order in _game.Board)
             {
-                string card = OrderBoardView.Compose(order, taken: false);
+                // Compare on whitespace-flattened text. The card wraps the brief to a
+                // fixed column, so a raw substring check fails on wording that is
+                // present and correct.
+                //
+                // Flattening matters far more for the NEGATIVE assertion below: a
+                // leaked technical spec would be wrapped too, so an unflattened
+                // Does.Not.Contain would sail past the very leak this test exists to
+                // catch. It was passing by accident, not by working.
+                string card = Flatten(OrderBoardView.Compose(order, taken: false));
 
-                Assert.That(card, Does.Contain(order.CustomerName));
-                Assert.That(card, Does.Contain(order.Brief));
+                Assert.That(card, Does.Contain(Flatten(order.CustomerName)));
+                Assert.That(card, Does.Contain(Flatten(order.Brief)));
 
                 foreach (var requirement in order.Requirements)
                 {
                     if (!string.IsNullOrEmpty(requirement.CustomerWords))
-                        Assert.That(card, Does.Contain(requirement.CustomerWords),
+                        Assert.That(card, Does.Contain(Flatten(requirement.CustomerWords)),
                             "the customer's own words must be on the card");
 
                     string technical = requirement.Technical;
                     if (string.IsNullOrEmpty(technical)) continue;
 
-                    Assert.That(card, Does.Not.Contain(technical),
+                    Assert.That(card, Does.Not.Contain(Flatten(technical)),
                         $"the card leaked the technical spec '{technical}' for {order.CustomerName}");
                 }
             }
         }
+
+        /// <summary>Collapses every run of whitespace to a single space, so wrapped
+        /// display text can be compared against the source wording.</summary>
+        private static string Flatten(string text)
+            => string.IsNullOrEmpty(text)
+                ? text
+                : System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
 
         /// <summary>A card says what a customer would say: how many, what they pay, and
         /// nothing about how to build it.</summary>

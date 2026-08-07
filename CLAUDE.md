@@ -409,9 +409,13 @@ unstable, and ruinously expensive.
 
 ## Verification practice
 
-All three suites stay green: **108/108 EditMode and 3/3 PlayMode in Unity, 61/61
+All three suites stay green: **183/183 EditMode and 3/3 PlayMode in Unity, 70/70
 outside** via `dotnet test`. The outside-Unity run is what proves the core is still
 portable to the other project — if it breaks, a Unity dependency leaked into the core.
+
+**Re-measure these numbers when you touch them; do not copy them forward.** They were
+stale by seventy tests once already, in a file that warns three paragraphs below about
+exactly that.
 
 PlayMode results are not reported through `ICallbacks` reliably, because entering play
 mode reloads the domain and drops the callback. Read
@@ -458,6 +462,13 @@ Testing caught six real modelling bugs that reading the code would not have:
 - No projectile-hardness model, so armour-piercing lost to FMJ against steel plate
 - No cavity-plugging, so the denim test did nothing
 - "Due tomorrow" silently granted two nights instead of one
+
+**Assert on flattened text when the view wraps it.** `OrderBoardTests` compared the
+card against `Order.Brief` with a raw substring check, but the card word-wraps to a
+fixed column. The positive assertion failed loudly, which was the easy half. The
+dangerous half was the negative one: a leaked technical spec would be wrapped too, so
+`Does.Not.Contain` could never have caught the leak the test exists to catch. It was
+passing by accident. Collapse whitespace on both sides before comparing display text.
 
 **Unity gotcha worth remembering:** at 9 mm scale a mesh triangle's cross product is
 ~1e-8, and `Vector3.normalized` silently returns **zero** below `kEpsilon` (1e-5). It
@@ -556,6 +567,54 @@ hand.
 the mouse in play mode, or with the move gizmo in edit mode, since `LatheStation` is
 `[ExecuteAlways]`. The mesh is generated at true size; only the rig transform is scaled
 up, so nothing a solver reads is touched.
+
+---
+
+## The workshop you walk around
+
+Built after the canon was last revised, so it is recorded here in full. **Every action
+is a PLACE YOU GO**, not an entry in a menu — this replaced a row of buttons, which was
+the wrong shape for a game whose whole premise is that you cannot leave the shop.
+
+| Piece | Role |
+|---|---|
+| `WorkshopBootstrap` | The **only** object saved in the scene. Builds the shop on Awake. |
+| `WorkshopBuilder` | Constructs the room and every station **at runtime**. |
+| `PlayerRig` | A body that stands in the shop and walks. Input System, not legacy `Input`. |
+| `Interactable` | Walk-up-and-use. Prompts are second person and name the object. |
+| `WorkshopController` | Joins the stations to `GunsmithGame` — the playable night. |
+| `OrderBoardView` | Cards by the door, in the customer's words only. |
+| `DeliveryReportView` | The morning-after note; leads with the person, not the number. |
+| `EvidenceRack` | Blocks, slugs and fired cases persist so you can walk the row. |
+
+**Construction MUST live in the runtime assembly, not an editor tool.** This is a real
+mistake already made and fixed: the shop was assembled by an editor tool and tagged
+`HideFlags.DontSave` so previews could never dirty the scene. But `DontSave` means *not
+serialised*, so pressing Play reloaded the scene, the workshop evaporated, and the game
+was an empty room. `WorkshopBootstrap` is the one serialised object; it rebuilds
+everything from code. Do not move construction back behind an editor menu.
+
+Second fix worth keeping: the player is deliberately **not** parented to the bootstrap,
+so an edit-mode preview leaves an orphan `PlayerRig` at the scene root that clearing the
+preview never touches. They accumulate, each runs its own `Update`, and
+`FindAnyObjectByType` then returns whichever it likes. `BuildPlayer` now destroys every
+existing rig first. There is exactly one gunsmith.
+
+**The stations do not share a natural scale and cannot be made to.** A 13 mm bullet needs
+exaggerating roughly forty times before it is worth looking at; a gel block is already
+person-sized. Only rig transforms are scaled — never anything a solver reads.
+
+### Known gap: it does not look like a shop yet
+
+Everything above is built out of `PrimitiveType.Cube`, `Sphere` and `Cylinder` in flat
+untextured colour. It reads as furniture floating in a skybox rather than a room: one
+back wall, no side walls, no ceiling, and large dead gaps between stations.
+
+This is a deliberate ordering — mechanics before art — and it is **contained to
+`WorkshopBuilder.cs`**. Nothing in the stations, the physics or the game loop knows what
+mesh it is drawn with. Treat the visual layer as its own pass, and start with **enclosure
+and layout** rather than materials: most of the "this is not a shop" feeling comes from
+the room not being a room, not from the lack of textures.
 
 ---
 
