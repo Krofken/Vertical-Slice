@@ -114,10 +114,67 @@ namespace Gunsmith.Interaction
         [Tooltip("Where the prompt is drawn. Sits just in front of the eyes.")]
         public TextMesh Prompt;
 
+        [Tooltip("Fraction of the screen width the prompt may occupy at most.")]
+        [Range(0.1f, 0.9f)]
+        public float PromptWidthFraction = 0.42f;
+
+        [Tooltip("Fraction of the screen height the prompt may occupy at most.")]
+        [Range(0.02f, 0.5f)]
+        public float PromptHeightFraction = 0.09f;
+
         private Interactable _looking;
         private PlayerRig _rig;
+        private Camera _camera;
+        private Vector3 _promptRestScale;
+        private bool _promptRestKnown;
 
-        private void Awake() => _rig = GetComponentInParent<PlayerRig>();
+        private void Awake()
+        {
+            _rig = GetComponentInParent<PlayerRig>();
+            _camera = GetComponentInParent<Camera>();
+            if (_camera == null) _camera = Camera.main;
+        }
+
+        /// <summary>
+        /// Scales the prompt so it always occupies the same slice of the screen.
+        ///
+        /// IT WAS NEVER FITTED TO ANYTHING. The prompt hangs 90 cm from the eye at a
+        /// hand-picked character size, so "[E] fire one into the block" rendered about
+        /// 2.4 m wide where only 1.85 m is visible — 130% of the screen, which is why it
+        /// covered everything. Leaning in made it far worse: focus drops the field of
+        /// view to 18 degrees, which shrinks the visible width at that distance to half
+        /// a metre, so the same line became roughly 470% of the screen.
+        ///
+        /// The fix has to be computed from the CAMERA, not tuned as a constant, because
+        /// the field of view changes every time the player leans over a station. Work
+        /// out how much world space is actually visible at the prompt's distance, then
+        /// fit the text into a fraction of it.
+        /// </summary>
+        private void FitPrompt()
+        {
+            if (Prompt == null || _camera == null) return;
+            if (string.IsNullOrEmpty(Prompt.text)) return;
+
+            if (!_promptRestKnown)
+            {
+                _promptRestScale = Prompt.transform.localScale;
+                _promptRestKnown = true;
+            }
+
+            // Fit multiplies, so always start from the resting scale or the prompt
+            // ratchets smaller every frame it is shown.
+            Prompt.transform.localScale = _promptRestScale;
+
+            float distance = Vector3.Distance(Prompt.transform.position, _camera.transform.position);
+            if (distance <= 0.01f) return;
+
+            float visibleHeight = 2f * distance * Mathf.Tan(_camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float visibleWidth = visibleHeight * _camera.aspect;
+
+            TextFit.Fit(Prompt,
+                new Vector2(visibleWidth * PromptWidthFraction, visibleHeight * PromptHeightFraction),
+                margin: 1f);
+        }
 
         private void Update()
         {
@@ -131,7 +188,13 @@ namespace Gunsmith.Interaction
             }
 
             if (Prompt != null)
+            {
                 Prompt.text = _looking != null ? $"[{UseKey}]  {_looking.Prompt}" : string.Empty;
+
+                // Every frame, not just on change: the field of view moves continuously
+                // while leaning in and out of a station.
+                FitPrompt();
+            }
 
             var keyboard = Keyboard.current;
             if (_looking == null || keyboard == null || !keyboard[UseKey].wasPressedThisFrame) return;
@@ -144,18 +207,46 @@ namespace Gunsmith.Interaction
             _looking.Use();
         }
 
-        /// <summary>Nearest interactable the player is actually facing, or null.</summary>
+        /// <summary>
+        /// Nearest interactable the player is actually facing, or null.
+        ///
+        /// SKIPS THE PLAYER'S OWN BODY. The head sits inside the CharacterController
+        /// capsule, so a plain raycast looking down hits 'Gunsmith' at eight centimetres
+        /// and stops there — every bench station is at 92 cm, below eye level, so the
+        /// moment you looked down to work you were staring at the inside of your own
+        /// chest. Looking level instead sent the ray straight over the bench. Between
+        /// the two, nothing on the bench could ever be used.
+        ///
+        /// Same mistake as the spawn probe in WorkshopBootstrap, in a second place: a
+        /// single Raycast from inside a collider finds that collider first.
+        /// </summary>
         private Interactable Probe()
         {
+            var body = _rig != null ? _rig.transform : null;
+
             // Generous reach so nothing is out of range; each interactable then applies
             // its own limit, because a press handle wants you closer than a notice board.
-            if (!Physics.Raycast(transform.position, transform.forward, out var hit, 6f))
-                return null;
+            var hits = Physics.RaycastAll(transform.position, transform.forward, 6f,
+                ~0, QueryTriggerInteraction.Collide);
 
-            var interactable = hit.collider.GetComponentInParent<Interactable>();
-            if (interactable == null) return null;
+            Interactable best = null;
+            float nearest = float.MaxValue;
 
-            return hit.distance <= interactable.Reach ? interactable : null;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var collider = hits[i].collider;
+                if (body != null && collider.transform.IsChildOf(body)) continue;
+                if (hits[i].distance >= nearest) continue;
+
+                var interactable = collider.GetComponentInParent<Interactable>();
+                if (interactable == null) continue;
+                if (hits[i].distance > interactable.Reach) continue;
+
+                nearest = hits[i].distance;
+                best = interactable;
+            }
+
+            return best;
         }
 
         private void OnDisable()
