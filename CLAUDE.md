@@ -171,12 +171,23 @@ while the rest sat hardcoded and invisible. The player works four stations:
 |---|---|---|
 | **Propellant mill** | base chemistry, grain shape, web thickness, deterrent coating | **built** |
 | **Core bench (lathe)** | projectile geometry, and the materials it is made of | **built** |
-| **Press** | assembles case + primer + charge + bullet into rounds | `AmmunitionWorkshop.Craft` exists, no tool |
+| **Press** | assembles case + primer + charge + bullet into rounds | **built** |
 | **Case and primer** | case geometry, primer chemistry | **deferred — see below** |
 
 The powder balance and the seating stop are **parts of the press**, not stations of
-their own: you weigh a charge, pour it, then seat the bullet against the stop. They were
-built standalone and should be folded in when the press is.
+their own: you weigh a charge, pour it, then seat the bullet against the stop.
+`LoadingPress` now feeds off all four tools, so the whole bench composes one cartridge.
+The press designs nothing itself — it only gathers what the other tools made, adds a
+case and a primer, and pulls the handle.
+
+**OPEN QUESTION — the press currently warns that a load will burst.**
+`AmmunitionWorkshop.Craft` refuses an overpressure design with "This design will not fire
+safely," which is a *prediction about firing* and sits badly against rule 2. A gunsmith
+can see that a charge will not physically fit a case; they cannot see peak pressure.
+The likely fix is to split the two refusals — let assembly-impossible loads be refused
+and let ballistically-dangerous ones be pressed, so the player learns from a ruptured
+case at the range. Not changed yet, because it alters existing core semantics and is a
+design call rather than a bug.
 
 ## Crafting: operate tools, don't fill in a form
 
