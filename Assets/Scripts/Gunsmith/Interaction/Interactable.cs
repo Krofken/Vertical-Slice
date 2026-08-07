@@ -5,6 +5,26 @@ using UnityEngine.InputSystem;
 namespace Gunsmith.Interaction
 {
     /// <summary>
+    /// Which of the shop's actions a fixture performs.
+    ///
+    /// THIS IS AN ENUM AND NOT A DELEGATE FOR ONE REASON: it has to survive being saved.
+    /// A <see cref="System.Action"/> assigned in code cannot be serialised, so a shop
+    /// loaded from a prefab or placed by hand came up with every fixture inert — the
+    /// press handle, the counter, the cot, all present, all doing nothing, with no
+    /// error to say so. An enum round-trips through a prefab and a scene file, and
+    /// <see cref="WorkshopController"/> binds it on Awake.
+    /// </summary>
+    public enum ShopAction
+    {
+        None = 0,
+        TakeJob = 1,
+        PullPressHandle = 2,
+        FireOne = 3,
+        HandOverBatch = 4,
+        TurnInForTheNight = 5
+    }
+
+    /// <summary>
     /// A thing in the shop you can walk up to and use.
     ///
     /// This replaces the row of buttons, which was the wrong shape for this game: the
@@ -23,8 +43,18 @@ namespace Gunsmith.Interaction
                  "object rather than the system.")]
         public string Prompt = "use";
 
-        /// <summary>What using it does. Wired in code by the builder.</summary>
-        public Action Used;
+        [Tooltip("Which shop action this performs. Serialised, so it survives being " +
+                 "saved into a prefab or a scene — unlike a code-assigned delegate.")]
+        public ShopAction Action = ShopAction.None;
+
+        /// <summary>
+        /// What using it does, bound at runtime.
+        ///
+        /// Set by <see cref="WorkshopController"/> from <see cref="Action"/>, or
+        /// assigned directly in code for a one-off fixture that has no enum entry.
+        /// Never serialised — see <see cref="ShopAction"/> for why that matters.
+        /// </summary>
+        [NonSerialized] public Action Used;
 
         [Tooltip("How close you have to be, metres. A shop is small.")]
         public float Reach = 2.6f;

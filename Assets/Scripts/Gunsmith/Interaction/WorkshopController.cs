@@ -59,7 +59,48 @@ namespace Gunsmith.Interaction
 
         private int _batch;
 
+        private void Awake() => BindFixtures();
+
         private void Start() => Refresh();
+
+        /// <summary>
+        /// Points every fixture in the shop at the method it performs.
+        ///
+        /// THE CONTROLLER WIRES ITSELF, rather than relying on whoever built it. That
+        /// distinction is the difference between a shop that works and one that only
+        /// looks like it does: <see cref="Interactable.Used"/> is a delegate and cannot
+        /// be serialised, so a workshop restored from a prefab or placed by hand used to
+        /// come up with every fixture present, highlighted, promptable — and inert. No
+        /// error, no missing object, just nothing happening when you pulled the handle.
+        ///
+        /// Binding from the serialised <see cref="Interactable.Action"/> on Awake means
+        /// it does not matter how the fixture got there. Duplicate the press handle,
+        /// move it across the room, replace its cube with a real lever model: it still
+        /// works, because the enum came with it.
+        /// </summary>
+        public void BindFixtures()
+        {
+            foreach (var fixture in GetComponentsInChildren<Interactable>(includeInactive: true))
+            {
+                switch (fixture.Action)
+                {
+                    case ShopAction.TakeJob: fixture.Used = TakeJob; break;
+                    case ShopAction.PullPressHandle: fixture.Used = PullHandle; break;
+                    case ShopAction.FireOne: fixture.Used = FireOne; break;
+                    case ShopAction.HandOverBatch: fixture.Used = DeliverBatch; break;
+                    case ShopAction.TurnInForTheNight: fixture.Used = Advance; break;
+
+                    case ShopAction.None:
+                        // Left for a fixture wired directly in code. Only worth
+                        // complaining about if nothing set it either.
+                        if (fixture.Used == null)
+                            Debug.LogWarning(
+                                $"[Shop] '{fixture.name}' has no action set and nothing bound it. " +
+                                "Set Interactable.Action in the inspector.", fixture);
+                        break;
+                }
+            }
+        }
 
         // ------------------------------------------------------------------
         // The actions, one per thing you can click

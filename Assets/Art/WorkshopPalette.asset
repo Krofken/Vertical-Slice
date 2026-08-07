@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5dd5490a46011e4cb8c40410548d925, type: 3}
+  m_Name: WorkshopPalette
+  m_EditorClassIdentifier: Gunsmith::Gunsmith.Interaction.WorkshopPalette
+  Floor: {fileID: 2100000, guid: caef76b9a551dcb479e311d1e6f410a5, type: 2}
+  Wall: {fileID: 2100000, guid: c517e355b3699124db178cc0b2b9f14d, type: 2}
+  BenchTop: {fileID: 2100000, guid: a9692d8e9a039494c9e9e48c60f645bb, type: 2}
+  Fixture: {fileID: 2100000, guid: 11efd3ad15c4869438079653af030ea3, type: 2}
+  Card: {fileID: 2100000, guid: a81b8080020391a41885ead1f0ce6608, type: 2}
+  CardAccepted: {fileID: 2100000, guid: c6c3e3653cd03274f9041b16af0542f1, type: 2}
+  Note: {fileID: 2100000, guid: a421d0c85eefa004d93dcbdeed668fd4, type: 2}
+  NoteDisaster: {fileID: 2100000, guid: 049c2233c249119429518013e21e1799, type: 2}
+  GelBlock: {fileID: 2100000, guid: e4ce993240eba6a479bdd9fe7934079b, type: 2}
+  Cavity: {fileID: 2100000, guid: 17215bf61dda61446bac37ee8e78be1b, type: 2}
+  DepthBand: {fileID: 2100000, guid: f634e0a98135adb4594411b7c79a4078, type: 2}
+  WitnessCard: {fileID: 2100000, guid: b20dc2de07fc066479089b53a362384c, type: 2}
+  RecoveredSlug: {fileID: 2100000, guid: 34ccde6ca352e314a8665f9173ef8dd6, type: 2}
+  Brass: {fileID: 2100000, guid: b1d32339e9c7b7d42ba66a98f220eee2, type: 2}
+  Primer: {fileID: 2100000, guid: 9c1cd35e8d25fa54bb9907ed4b2ecce3, type: 2}
+  Mark: {fileID: 2100000, guid: 6b683ce9cf14fb4448dd5fe3e5374a3a, type: 2}
+  Projectile: {fileID: 2100000, guid: 4b9ee92fb769a8c4e84f841489bb2308, type: 2}
+  ProjectileInvalid: {fileID: 2100000, guid: b0b8058867ff7534db2b18eccac5909f, type: 2}
+  PowderGrain: {fileID: 2100000, guid: d8d86612d1a88554d9701d2542dbc363, type: 2}
+  Metal: {fileID: 2100000, guid: 99ee9930caa60b34990a2c988e7c381b, type: 2}
+  Poise: {fileID: 2100000, guid: fb9b05e017fc9654ba678e57d7859808, type: 2}
+  Case: {fileID: 2100000, guid: d7a8cf6d845b4de4d869011f4d8c868e, type: 2}
+  SeatingStop: {fileID: 2100000, guid: 21cf89d0330535f4c9936ebd9b07c248, type: 2}
+  Handles:
+  - {fileID: 2100000, guid: e759dc03a83cd52468bb701943ee2f4c, type: 2}
+  - {fileID: 2100000, guid: 3431548b761c4514bb1522e85164ec53, type: 2}
+  - {fileID: 2100000, guid: 9c3a5214b02e0e94586ed89a3f45d3aa, type: 2}
+  - {fileID: 2100000, guid: 566d32615b9dfd546afb1ca1ef25b22f, type: 2}
+  - {fileID: 2100000, guid: e58d286fb055461418b4192b381c7f52, type: 2}
+  - {fileID: 2100000, guid: 974fe01b88bc52b4fa8e53d39ecbdfbe, type: 2}
+  - {fileID: 2100000, guid: 404c8cff7f9b55c41a519f1aa86741de, type: 2}
+  - {fileID: 2100000, guid: aa974fff54cab0c41bae3121f8a2ab7d, type: 2}
+  - {fileID: 2100000, guid: 8d4099586b5cc5a49891c39b94e86d1d, type: 2}

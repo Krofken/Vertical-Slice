@@ -409,7 +409,7 @@ unstable, and ruinously expensive.
 
 ## Verification practice
 
-All three suites stay green: **183/183 EditMode and 3/3 PlayMode in Unity, 70/70
+All three suites stay green: **190/190 EditMode and 3/3 PlayMode in Unity, 70/70
 outside** via `dotnet test`. The outside-Unity run is what proves the core is still
 portable to the other project — if it breaks, a Unity dependency leaked into the core.
 
@@ -469,6 +469,15 @@ fixed column. The positive assertion failed loudly, which was the easy half. The
 dangerous half was the negative one: a leaked technical spec would be wrapped too, so
 `Does.Not.Contain` could never have caught the leak the test exists to catch. It was
 passing by accident. Collapse whitespace on both sides before comparing display text.
+
+**A delegate cannot be saved, and a dead fixture has no symptom.** `Interactable.Used`
+was a `System.Action` assigned by the builder. That is invisible to serialisation, so
+the moment the shop could be written to a prefab, a loaded copy came up with every
+fixture present, highlighted, promptable — and inert. No error, no missing object,
+nothing in the console. Anything a saved object needs must be a serialised FIELD; the
+enum `ShopAction` carries the intent and `WorkshopController.BindFixtures` turns it
+back into a method on Awake. Written down because the failure is silent, and because
+the same trap catches `UnityEvent`-free wiring of any kind.
 
 **Unity gotcha worth remembering:** at 9 mm scale a mesh triangle's cross product is
 ~1e-8, and `Vector3.normalized` silently returns **zero** below `kEpsilon` (1e-5). It
@@ -542,10 +551,14 @@ go stale in two places at once.)
 lines them up, which is the evidence rack the design calls for. `Clear Gel Block
 Preview` removes them.
 
-**`SampleScene` is clean and tracked.** It had picked up `~ProjectilePreview` and its
-five bullets — roughly 2000 lines of throwaway objects saved into it by accident — which
-have been cleared. It now holds only the camera, directional light and global volume it
-started with.
+**`SampleScene` holds the authored shop, deliberately.** It was previously kept to the
+camera, light and volume, on the rule that nothing should be serialised by accident.
+That rule stands for ACCIDENTS; the workshop is there on purpose, because a shop that
+only exists during Play cannot be edited or art-directed. It is a **prefab instance**, so
+the scene is 945 lines rather than the four thousand an inlined hierarchy would cost.
+
+It had also once picked up `~ProjectilePreview` and its five bullets — roughly 2000
+lines of throwaway objects saved in by accident — which were cleared and cannot recur.
 
 **Keep it that way, and it now keeps itself.** Every preview spawner tags its whole
 hierarchy `HideFlags.DontSave`, so previews are never serialised, the open scene never
@@ -591,8 +604,44 @@ the wrong shape for a game whose whole premise is that you cannot leave the shop
 mistake already made and fixed: the shop was assembled by an editor tool and tagged
 `HideFlags.DontSave` so previews could never dirty the scene. But `DontSave` means *not
 serialised*, so pressing Play reloaded the scene, the workshop evaporated, and the game
-was an empty room. `WorkshopBootstrap` is the one serialised object; it rebuilds
-everything from code. Do not move construction back behind an editor menu.
+was an empty room. Do not move construction back behind an editor menu.
+
+### The shop is authored, not conjured
+
+The fix above overshot: the shop existed ONLY while the game ran, so there was nothing
+to select, nothing to move, and no way to art-direct a room you cannot see. Both
+properties are now available and `WorkshopBuilder` takes a `persistent` flag:
+
+- **disposable** — everything `DontSave`. A preview that cannot reach the scene file.
+- **persistent** — real objects with real materials, meant to be saved.
+
+Three menu items, in order:
+
+| `Gunsmith → Author →` | Does |
+|---|---|
+| 1. Generate Materials And Palette | Writes 32 `.mat` assets and `WorkshopPalette` |
+| 2. Build Editable Workshop | Builds the shop into the scene as ordinary objects |
+| 3. Save Workshop As Prefab | Writes `Assets/Prefabs/Workshop Shop.prefab` |
+
+**Materials had to become assets first.** The builder used `new Material(shader)` tagged
+`DontSave`, which has no asset behind it, so anything referencing one could not be
+serialised — every station was un-prefabbable by construction. `WorkshopPalette` holds
+them, empty slots fall back to the old flat colours, and it doubles as the art-direction
+surface: swapping the bench to real wood is picking a slot, not editing source.
+
+**`WorkshopBootstrap.Shop` must stay a serialised FIELD.** It was a read-only property,
+so it was never saved, so it was always null on Awake, so the bootstrap rebuilt over the
+top of any hand-placed layout every single time. It now adopts an assigned or child
+`WorkshopController` and only builds when there genuinely is none.
+
+**Strip `DontSave` children before writing a prefab.** They cannot be saved, so the
+asset's layout differs from the instance's and Unity warns that data may be lost. The
+only ones are the propellant mill's ~24 cosmetic grains, regenerated whenever the powder
+changes.
+
+What stays procedural, and should: the projectile mesh, the wound cavity, the recovered
+slug, the fired case, the order cards. Those are pictures OF A SIMULATION RESULT. A
+bench is not.
 
 Second fix worth keeping: the player is deliberately **not** parented to the bootstrap,
 so an edit-mode preview leaves an orphan `PlayerRig` at the scene root that clearing the

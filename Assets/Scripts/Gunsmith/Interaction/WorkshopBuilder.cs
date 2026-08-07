@@ -4,31 +4,66 @@ using Gunsmith.Orders;
 using Gunsmith.Range;
 using Krofken.Ballistics;
 using UnityEngine;
+using Defaults = Gunsmith.Interaction.WorkshopPalette.Defaults;
 
 namespace Gunsmith.Interaction
 {
     /// <summary>
-    /// Builds the shop AT RUNTIME.
+    /// Builds the shop.
     ///
-    /// This used to live in an editor-only tool, which is why the workshop did not exist
-    /// when you pressed Play. Construction belongs here, in the runtime assembly, so the
-    /// same code makes the shop in the editor, in Play mode and in a build.
+    /// TWO MODES, and the difference is the whole reason this class was reworked:
+    ///
+    ///   DISPOSABLE (default) — everything is tagged <c>HideFlags.DontSave</c> in the
+    ///     editor, so a preview can never leak into the scene file or raise a save
+    ///     prompt. Correct for a look-and-throw-away preview. At runtime the flag is
+    ///     skipped, because nothing is serialised in Play mode anyway and DontSave
+    ///     objects are destroyed by a domain reload.
+    ///
+    ///   PERSISTENT — real objects with real materials, meant to be saved into the
+    ///     scene and turned into prefabs. THIS is what makes the shop editable by hand.
+    ///     Until it existed the workshop only came into being when you pressed Play, so
+    ///     there was nothing to move, nothing to re-mesh, and nothing to art-direct.
+    ///
+    /// Construction stays in the RUNTIME assembly, not an editor tool. That is not
+    /// stylistic: it was moved here because an editor-only builder meant the shop did
+    /// not exist in a build or in Play mode at all. The persistent path is driven from
+    /// an editor tool, but the code that knows how to make a bench lives here.
     ///
     /// The stations do not share a natural scale and cannot be made to — a 13 mm bullet
     /// needs exaggerating about forty times before it is worth looking at, while a gel
-    /// block is already seventy centimetres. Each group therefore gets its own factor,
-    /// chosen for how big it should READ. Only display rigs are scaled; nothing a solver
-    /// touches is affected.
+    /// block is already seventy centimetres. Each group gets its own factor, chosen for
+    /// how big it should READ. Only display rigs are scaled; nothing a solver touches is
+    /// affected.
     /// </summary>
-    public static class WorkshopBuilder
+    public sealed class WorkshopBuilder
     {
         private const float BenchScale = 0.45f;
         private const float RackScale = 0.90f;
         private const float BoardScale = 0.85f;
         private const float BulletDisplayScale = 40f;
 
-        /// <summary>Builds the whole shop under a parent and returns its controller.</summary>
-        public static WorkshopController Build(Transform parent)
+        private readonly WorkshopPalette _palette;
+        private readonly bool _persistent;
+
+        private WorkshopBuilder(WorkshopPalette palette, bool persistent)
+        {
+            _palette = palette;
+            _persistent = persistent;
+        }
+
+        /// <summary>
+        /// Builds the whole shop under a parent and returns its controller.
+        /// </summary>
+        /// <param name="parent">Where to hang it.</param>
+        /// <param name="palette">Surface materials. Null, or slots left empty, fall back
+        /// to the flat colours the shop used before there was a palette.</param>
+        /// <param name="persistent">True to produce real, saveable objects. False for a
+        /// disposable preview.</param>
+        public static WorkshopController Build(
+            Transform parent, WorkshopPalette palette = null, bool persistent = false)
+            => new WorkshopBuilder(palette, persistent).BuildShop(parent);
+
+        private WorkshopController BuildShop(Transform parent)
         {
             var root = new GameObject("Shop");
             root.transform.SetParent(parent, false);
@@ -60,71 +95,60 @@ namespace Gunsmith.Interaction
 
         /// <summary>Something to stand on. Without it the character controller falls
         /// forever the moment the game starts.</summary>
-        private static void BuildFloor(Transform parent)
+        private void BuildFloor(Transform parent)
         {
-            var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            floor.name = "Floor";
-            floor.transform.SetParent(parent, false);
-            floor.transform.localPosition = new Vector3(0f, -0.1f, 0f);
-            floor.transform.localScale = new Vector3(16f, 0.2f, 12f);
-            floor.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.28f, 0.26f, 0.24f));
-            Disposable(floor);
+            Primitive(PrimitiveType.Cube, parent, "Floor",
+                new Vector3(0f, -0.1f, 0f), new Vector3(16f, 0.2f, 12f),
+                Mat(_palette?.Floor, Defaults.Floor));
 
-            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            wall.name = "Back wall";
-            wall.transform.SetParent(parent, false);
-            wall.transform.localPosition = new Vector3(0f, 1.6f, 1.4f);
-            wall.transform.localScale = new Vector3(16f, 3.4f, 0.2f);
-            wall.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.34f, 0.31f, 0.28f));
-            Disposable(wall);
+            Primitive(PrimitiveType.Cube, parent, "Back wall",
+                new Vector3(0f, 1.6f, 1.4f), new Vector3(16f, 3.4f, 0.2f),
+                Mat(_palette?.Wall, Defaults.Wall));
         }
 
-        private static OrderBoardView BuildBoard(Transform parent)
+        private OrderBoardView BuildBoard(Transform parent)
         {
-            var go = new GameObject("Order board");
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(-2.9f, 1.7f, 1.28f);
-            go.transform.localScale = Vector3.one * BoardScale;
-            Disposable(go);
+            var go = Empty(parent, "Order board",
+                new Vector3(-2.9f, 1.7f, 1.28f), Vector3.one * BoardScale);
 
             var board = go.AddComponent<OrderBoardView>();
-            board.CardMaterial = Flat(new Color(0.90f, 0.87f, 0.78f));
-            board.AcceptedCardMaterial = Flat(new Color(0.74f, 0.80f, 0.70f));
+            board.CardMaterial = Mat(_palette?.Card, Defaults.Card);
+            board.AcceptedCardMaterial = Mat(_palette?.CardAccepted, Defaults.CardAccepted);
             return board;
         }
 
-        private static DeliveryReportView BuildReports(Transform parent)
+        private DeliveryReportView BuildReports(Transform parent)
         {
-            var go = new GameObject("Delivery notes");
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(-2.9f, 0.75f, 1.28f);
-            go.transform.localScale = Vector3.one * BoardScale;
-            Disposable(go);
+            var go = Empty(parent, "Delivery notes",
+                new Vector3(-2.9f, 0.75f, 1.28f), Vector3.one * BoardScale);
 
             var reports = go.AddComponent<DeliveryReportView>();
-            reports.NoteMaterial = Flat(new Color(0.92f, 0.90f, 0.82f));
-            reports.DisasterNoteMaterial = Flat(new Color(0.88f, 0.72f, 0.68f));
+            reports.NoteMaterial = Mat(_palette?.Note, Defaults.Note);
+            reports.DisasterNoteMaterial = Mat(_palette?.NoteDisaster, Defaults.NoteDisaster);
             return reports;
         }
 
-        private static EvidenceRack BuildRack(Transform parent)
+        private EvidenceRack BuildRack(Transform parent)
         {
-            var go = new GameObject("Evidence rack");
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(2.6f, 1.0f, 1.1f);
+            var go = Empty(parent, "Evidence rack",
+                new Vector3(2.6f, 1.0f, 1.1f), Vector3.one * RackScale);
             go.transform.localRotation = Quaternion.Euler(0f, -18f, 0f);
-            go.transform.localScale = Vector3.one * RackScale;
-            Disposable(go);
 
             var rack = go.AddComponent<EvidenceRack>();
-            rack.BlockMaterial = Translucent(new Color(0.70f, 0.78f, 0.72f, 0.16f));
-            rack.CavityMaterial = Flat(new Color(0.85f, 0.25f, 0.20f));
-            rack.BandMaterial = Flat(new Color(0.10f, 0.10f, 0.12f));
-            rack.CardMaterial = Flat(new Color(0.92f, 0.90f, 0.84f));
-            rack.ProjectileMaterial = Flat(new Color(0.75f, 0.58f, 0.30f));
-            rack.BrassMaterial = Flat(new Color(0.80f, 0.66f, 0.30f));
-            rack.PrimerMaterial = Flat(new Color(0.66f, 0.64f, 0.60f));
-            rack.MarkMaterial = Flat(new Color(0.20f, 0.18f, 0.16f));
+
+            // The block is the only translucent surface in the shop; the cavity is a
+            // solid suspended inside it, which is why it reads as a wound channel.
+            rack.BlockMaterial = _palette?.GelBlock != null
+                ? _palette.GelBlock
+                : WorkshopPalette.Translucent(Defaults.GelBlock);
+
+            rack.CavityMaterial = Mat(_palette?.Cavity, Defaults.Cavity);
+            rack.BandMaterial = Mat(_palette?.DepthBand, Defaults.DepthBand);
+            rack.CardMaterial = Mat(_palette?.WitnessCard, Defaults.WitnessCard);
+            rack.ProjectileMaterial = Mat(_palette?.RecoveredSlug, Defaults.RecoveredSlug);
+            rack.BrassMaterial = Mat(_palette?.Brass, Defaults.Brass);
+            rack.PrimerMaterial = Mat(_palette?.Primer, Defaults.Primer);
+            rack.MarkMaterial = Mat(_palette?.Mark, Defaults.Mark);
             return rack;
         }
 
@@ -132,21 +156,14 @@ namespace Gunsmith.Interaction
         // The bench: four tools feeding one press
         // ------------------------------------------------------------------
 
-        private static LoadingPress BuildBench(Transform parent)
+        private LoadingPress BuildBench(Transform parent)
         {
-            var bench = new GameObject("Bench");
-            bench.transform.SetParent(parent, false);
-            bench.transform.localPosition = new Vector3(0f, 1.15f, 0.9f);
-            bench.transform.localScale = Vector3.one * BenchScale;
-            Disposable(bench);
+            var bench = Empty(parent, "Bench",
+                new Vector3(0f, 1.15f, 0.9f), Vector3.one * BenchScale);
 
-            var top = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            top.name = "Bench top";
-            top.transform.SetParent(bench.transform, false);
-            top.transform.localPosition = new Vector3(0f, -0.55f, 0f);
-            top.transform.localScale = new Vector3(7f, 0.12f, 1.6f);
-            top.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.36f, 0.27f, 0.19f));
-            Disposable(top);
+            Primitive(PrimitiveType.Cube, bench.transform, "Bench top",
+                new Vector3(0f, -0.55f, 0f), new Vector3(7f, 0.12f, 1.6f),
+                Mat(_palette?.BenchTop, Defaults.BenchTop));
 
             var station = BuildLathe(bench.transform);
             var mill = BuildMill(bench.transform);
@@ -162,91 +179,74 @@ namespace Gunsmith.Interaction
             return press;
         }
 
-        private static LatheStation BuildLathe(Transform parent)
+        private LatheStation BuildLathe(Transform parent)
         {
-            var go = new GameObject("Core bench");
-            go.transform.SetParent(parent, false);
-            Disposable(go);
+            var go = Empty(parent, "Core bench", Vector3.zero, Vector3.one);
 
             var station = go.AddComponent<LatheStation>();
             station.Geometry = ProjectileGeometry.Default9mmFmj;
-            station.ValidMaterial = Flat(new Color(0.76f, 0.60f, 0.32f));
-            station.InvalidMaterial = Flat(new Color(0.85f, 0.25f, 0.20f));
+            station.ValidMaterial = Mat(_palette?.Projectile, Defaults.Projectile);
+            station.InvalidMaterial = Mat(_palette?.ProjectileInvalid, Defaults.ProjectileInvalid);
 
-            var rig = new GameObject("Rig").transform;
-            rig.SetParent(go.transform, false);
-            rig.localScale = Vector3.one * BulletDisplayScale;
+            var rig = Empty(go.transform, "Rig", Vector3.zero, Vector3.one * BulletDisplayScale).transform;
             rig.localRotation = Quaternion.Euler(0f, -90f, 0f);
             station.Rig = rig;
-            Disposable(rig.gameObject);
 
-            var bullet = new GameObject("Projectile");
-            bullet.transform.SetParent(rig, false);
+            var bullet = Empty(rig, "Projectile", Vector3.zero, Vector3.one);
             station.BulletMesh = bullet.AddComponent<MeshFilter>();
             station.BulletRenderer = bullet.AddComponent<MeshRenderer>();
-            Disposable(bullet);
 
             station.Handles = new Transform[LatheStation.OperationCount];
-            AddHandle(station, rig, LatheOperation.MeplatDiameter, "Meplat", new Color(0.95f, 0.80f, 0.25f));
-            AddHandle(station, rig, LatheOperation.CavityMouth, "Cavity mouth", new Color(0.95f, 0.45f, 0.25f));
-            AddHandle(station, rig, LatheOperation.CavityDepth, "Cavity depth", new Color(0.90f, 0.35f, 0.45f));
-            AddHandle(station, rig, LatheOperation.NoseLength, "Nose length", new Color(0.35f, 0.75f, 0.95f));
-            AddHandle(station, rig, LatheOperation.OgiveShape, "Ogive shape", new Color(0.45f, 0.90f, 0.60f));
-            AddHandle(station, rig, LatheOperation.BearingSurface, "Bearing surface", new Color(0.60f, 0.60f, 0.95f));
-            AddHandle(station, rig, LatheOperation.BoattailLength, "Boattail length", new Color(0.80f, 0.55f, 0.95f));
-            AddHandle(station, rig, LatheOperation.BoattailAngle, "Boattail angle", new Color(0.95f, 0.95f, 0.95f));
-            AddHandle(station, rig, LatheOperation.JacketThickness, "Jacket", new Color(0.95f, 0.55f, 0.75f));
+            AddHandle(station, rig, LatheOperation.MeplatDiameter, "Meplat");
+            AddHandle(station, rig, LatheOperation.CavityMouth, "Cavity mouth");
+            AddHandle(station, rig, LatheOperation.CavityDepth, "Cavity depth");
+            AddHandle(station, rig, LatheOperation.NoseLength, "Nose length");
+            AddHandle(station, rig, LatheOperation.OgiveShape, "Ogive shape");
+            AddHandle(station, rig, LatheOperation.BearingSurface, "Bearing surface");
+            AddHandle(station, rig, LatheOperation.BoattailLength, "Boattail length");
+            AddHandle(station, rig, LatheOperation.BoattailAngle, "Boattail angle");
+            AddHandle(station, rig, LatheOperation.JacketThickness, "Jacket");
 
-            station.ScaleReadout = Label(go.transform, "Scale",
-                new Vector3(0f, -0.34f, 0f), 0.012f);
-            station.Complaint = Label(go.transform, "Complaint",
-                new Vector3(0f, -0.46f, 0f), 0.007f);
+            station.ScaleReadout = Label(go.transform, "Scale", new Vector3(0f, -0.34f, 0f), 0.012f);
+            station.Complaint = Label(go.transform, "Complaint", new Vector3(0f, -0.46f, 0f), 0.007f);
             station.Complaint.color = new Color(0.95f, 0.35f, 0.30f);
 
             station.Rebuild();
             return station;
         }
 
-        private static void AddHandle(
-            LatheStation station, Transform rig, LatheOperation operation, string label, Color colour)
+        private void AddHandle(LatheStation station, Transform rig, LatheOperation operation, string label)
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            go.name = label;
-            go.transform.SetParent(rig, false);
-            go.transform.localScale = Vector3.one * 0.0014f;
-            go.GetComponent<MeshRenderer>().sharedMaterial = Flat(colour);
-            Disposable(go);
+            int index = (int)operation;
+            Color fallback = index < Defaults.Handles.Length ? Defaults.Handles[index] : Color.white;
+
+            Material material = _palette != null
+                ? _palette.ResolveHandle(index, fallback)
+                : WorkshopPalette.Flat(fallback);
+
+            var go = Primitive(PrimitiveType.Sphere, rig, label,
+                Vector3.zero, Vector3.one * 0.0014f, material);
 
             var handle = go.AddComponent<LatheHandle>();
             handle.Operation = operation;
             handle.Station = station;
 
-            station.Handles[(int)operation] = go.transform;
+            station.Handles[index] = go.transform;
         }
 
-        private static PropellantMill BuildMill(Transform parent)
+        private PropellantMill BuildMill(Transform parent)
         {
-            var go = new GameObject("Propellant mill");
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(-2.1f, -0.15f, 0f);
-            Disposable(go);
+            var go = Empty(parent, "Propellant mill", new Vector3(-2.1f, -0.15f, 0f), Vector3.one);
 
             var mill = go.AddComponent<PropellantMill>();
-            mill.GrainMaterial = Flat(new Color(0.24f, 0.22f, 0.20f));
+            mill.GrainMaterial = Mat(_palette?.PowderGrain, Defaults.PowderGrain);
 
-            var tray = new GameObject("Grain tray").transform;
-            tray.SetParent(go.transform, false);
-            tray.localScale = Vector3.one * 900f;
+            var tray = Empty(go.transform, "Grain tray", Vector3.zero, Vector3.one * 900f).transform;
             mill.GrainTray = tray;
-            Disposable(tray.gameObject);
 
-            var pan = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            pan.name = "Pan";
-            pan.transform.SetParent(go.transform, false);
-            pan.transform.localPosition = new Vector3(0f, -0.012f, 0f);
-            pan.transform.localScale = new Vector3(0.30f, 0.008f, 0.30f);
-            pan.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.50f, 0.52f, 0.56f));
-            Disposable(pan);
+            Primitive(PrimitiveType.Cylinder, go.transform, "Pan",
+                new Vector3(0f, -0.012f, 0f), new Vector3(0.30f, 0.008f, 0.30f),
+                Mat(_palette?.Metal, Defaults.Metal));
 
             mill.Readout = Label(go.transform, "Mill readout", new Vector3(0f, -0.14f, 0f), 0.008f);
 
@@ -256,46 +256,30 @@ namespace Gunsmith.Interaction
             return mill;
         }
 
-        private static PowderBalance BuildBalance(Transform parent)
+        private PowderBalance BuildBalance(Transform parent)
         {
-            var go = new GameObject("Powder balance");
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(-1.1f, 0.25f, 0f);
-            Disposable(go);
+            var go = Empty(parent, "Powder balance", new Vector3(-1.1f, 0.25f, 0f), Vector3.one);
 
             var balance = go.AddComponent<PowderBalance>();
             balance.BeamTravel = 0.30;
             balance.MaxSettingGrains = 12.0;
 
-            var beam = new GameObject("Beam").transform;
-            beam.SetParent(go.transform, false);
+            var beam = Empty(go.transform, "Beam", Vector3.zero, Vector3.one).transform;
             balance.Beam = beam;
-            Disposable(beam.gameObject);
 
-            var bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            bar.name = "Bar";
-            bar.transform.SetParent(beam, false);
-            bar.transform.localPosition = new Vector3(0.10f, 0f, 0f);
-            bar.transform.localScale = new Vector3(0.44f, 0.012f, 0.012f);
-            bar.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.62f, 0.64f, 0.68f));
-            Disposable(bar);
+            Primitive(PrimitiveType.Cube, beam, "Bar",
+                new Vector3(0.10f, 0f, 0f), new Vector3(0.44f, 0.012f, 0.012f),
+                Mat(_palette?.Metal, Defaults.Metal));
 
-            var poise = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            poise.name = "Poise";
-            poise.transform.SetParent(beam, false);
-            poise.transform.localScale = new Vector3(0.022f, 0.05f, 0.05f);
-            poise.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.90f, 0.75f, 0.30f));
+            var poise = Primitive(PrimitiveType.Cube, beam, "Poise",
+                Vector3.zero, new Vector3(0.022f, 0.05f, 0.05f),
+                Mat(_palette?.Poise, Defaults.Poise));
             balance.Poise = poise.transform;
-            Disposable(poise);
 
-            var pan = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            pan.name = "Pan";
-            pan.transform.SetParent(beam, false);
-            pan.transform.localPosition = new Vector3(-0.13f, -0.05f, 0f);
-            pan.transform.localScale = new Vector3(0.10f, 0.012f, 0.10f);
-            pan.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.55f, 0.58f, 0.62f));
+            var pan = Primitive(PrimitiveType.Cylinder, beam, "Pan",
+                new Vector3(-0.13f, -0.05f, 0f), new Vector3(0.10f, 0.012f, 0.10f),
+                Mat(_palette?.Metal, Defaults.Metal));
             balance.Pan = pan.transform;
-            Disposable(pan);
 
             balance.BeamReadout = Label(go.transform, "Beam readout", new Vector3(0.10f, -0.16f, 0f), 0.010f);
 
@@ -304,46 +288,33 @@ namespace Gunsmith.Interaction
             return balance;
         }
 
-        private static SeatingStop BuildDie(Transform parent, LatheStation station)
+        private SeatingStop BuildDie(Transform parent, LatheStation station)
         {
-            var go = new GameObject("Seating die");
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(1.6f, 0f, 0f);
-            Disposable(go);
+            var go = Empty(parent, "Seating die", new Vector3(1.6f, 0f, 0f), Vector3.one);
 
             var die = go.AddComponent<SeatingStop>();
             die.Projectile = station.Geometry;
 
-            var rig = new GameObject("Rig").transform;
-            rig.SetParent(go.transform, false);
-            rig.localScale = Vector3.one * BulletDisplayScale;
+            var rig = Empty(go.transform, "Rig", Vector3.zero, Vector3.one * BulletDisplayScale).transform;
             rig.localRotation = Quaternion.Euler(0f, -90f, 0f);
-            Disposable(rig.gameObject);
 
-            var casing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            casing.name = "Case";
-            casing.transform.SetParent(rig, false);
+            var casing = Primitive(PrimitiveType.Cylinder, rig, "Case",
+                new Vector3(0f, 0f, -(float)(die.CaseLength * 0.5)),
+                new Vector3(0.0095f, (float)(die.CaseLength * 0.5), 0.0095f),
+                Mat(_palette?.Case, Defaults.Case));
             casing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            casing.transform.localPosition = new Vector3(0f, 0f, -(float)(die.CaseLength * 0.5));
-            casing.transform.localScale = new Vector3(0.0095f, (float)(die.CaseLength * 0.5), 0.0095f);
-            casing.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.72f, 0.60f, 0.25f));
-            Disposable(casing);
 
-            var bullet = new GameObject("Bullet");
-            bullet.transform.SetParent(rig, false);
+            var bullet = Empty(rig, "Bullet", Vector3.zero, Vector3.one);
             bullet.AddComponent<MeshFilter>().sharedMesh =
                 Krofken.Ballistics.UnityIntegration.ProjectileMeshBuilder.Create(die.Projectile, 24, 24, 0.0);
-            bullet.AddComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.78f, 0.62f, 0.34f));
+            bullet.AddComponent<MeshRenderer>().sharedMaterial =
+                Mat(_palette?.Projectile, Defaults.Projectile);
             die.SeatedBullet = bullet.transform;
-            Disposable(bullet);
 
-            var stop = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            stop.name = "Stop";
-            stop.transform.SetParent(rig, false);
-            stop.transform.localScale = new Vector3(0.011f, 0.011f, 0.0012f);
-            stop.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.85f, 0.35f, 0.35f));
+            var stop = Primitive(PrimitiveType.Cube, rig, "Stop",
+                Vector3.zero, new Vector3(0.011f, 0.011f, 0.0012f),
+                Mat(_palette?.SeatingStop, Defaults.SeatingStop));
             die.Stop = stop.transform;
-            Disposable(stop);
 
             die.DepthReadout = Label(go.transform, "Die readout", new Vector3(0f, -0.16f, 0f), 0.008f);
             die.Depth = 0.0030;
@@ -361,61 +332,81 @@ namespace Gunsmith.Interaction
         /// a room you cross is not decoration — it is why the evidence rack works and
         /// why a test costs you something.
         /// </summary>
-        private static void BuildStationControls(Transform parent, WorkshopController shop)
+        private void BuildStationControls(Transform parent, WorkshopController shop)
         {
-            // The press handle: a lever standing off the end of the bench.
-            var lever = Fixture(parent, "Press handle", new Vector3(1.35f, 1.35f, 0.55f),
-                new Vector3(0.09f, 0.52f, 0.09f), new Color(0.72f, 0.32f, 0.22f));
-            Use(lever, "pull the press handle", 2.2f, shop.PullHandle);
+            var fixtureMaterial = Mat(_palette?.Fixture, Defaults.Fixture);
 
-            // The counter by the door, where a customer takes their box away.
-            var counter = Fixture(parent, "Counter", new Vector3(-2.2f, 0.5f, 0.2f),
-                new Vector3(1.5f, 1.0f, 0.7f), new Color(0.34f, 0.26f, 0.19f));
-            Use(counter, "hand the batch over", 2.4f, shop.DeliverBatch);
+            var lever = Primitive(PrimitiveType.Cube, parent, "Press handle",
+                new Vector3(1.35f, 1.35f, 0.55f), new Vector3(0.09f, 0.52f, 0.09f), fixtureMaterial);
+            Use(lever, "pull the press handle", 2.2f, ShopAction.PullPressHandle);
 
-            // The board itself is what you take a job from.
-            var boardFace = Fixture(parent, "Board face", new Vector3(-2.9f, 1.7f, 1.18f),
-                new Vector3(1.5f, 1.2f, 0.06f), new Color(0.42f, 0.33f, 0.24f));
-            Use(boardFace, "take the next job", 2.6f, shop.TakeJob);
+            var counter = Primitive(PrimitiveType.Cube, parent, "Counter",
+                new Vector3(-2.2f, 0.5f, 0.2f), new Vector3(1.5f, 1.0f, 0.7f), fixtureMaterial);
+            Use(counter, "hand the batch over", 2.4f, ShopAction.HandOverBatch);
 
-            // The firing point, out at the yard end by the rack.
-            var bench = Fixture(parent, "Firing point", new Vector3(3.4f, 0.55f, -0.4f),
-                new Vector3(1.1f, 1.1f, 0.6f), new Color(0.30f, 0.30f, 0.32f));
-            Use(bench, "fire one into the block", 2.4f, shop.FireOne);
+            var boardFace = Primitive(PrimitiveType.Cube, parent, "Board face",
+                new Vector3(-2.9f, 1.7f, 1.18f), new Vector3(1.5f, 1.2f, 0.06f), fixtureMaterial);
+            Use(boardFace, "take the next job", 2.6f, ShopAction.TakeJob);
 
-            // The cot in the corner. Sleeping is what resolves the night.
-            var cot = Fixture(parent, "Cot", new Vector3(-4.3f, 0.28f, -0.6f),
-                new Vector3(0.9f, 0.55f, 2.0f), new Color(0.38f, 0.34f, 0.42f));
-            Use(cot, "turn in for the night", 2.6f, shop.Advance);
+            var firing = Primitive(PrimitiveType.Cube, parent, "Firing point",
+                new Vector3(3.4f, 0.55f, -0.4f), new Vector3(1.1f, 1.1f, 0.6f), fixtureMaterial);
+            Use(firing, "fire one into the block", 2.4f, ShopAction.FireOne);
+
+            var cot = Primitive(PrimitiveType.Cube, parent, "Cot",
+                new Vector3(-4.3f, 0.28f, -0.6f), new Vector3(0.9f, 0.55f, 2.0f), fixtureMaterial);
+            Use(cot, "turn in for the night", 2.6f, ShopAction.TurnInForTheNight);
+
+            // Bind immediately so a code-built shop works without waiting for Awake,
+            // which never runs in edit mode.
+            shop.BindFixtures();
         }
 
-        private static GameObject Fixture(
-            Transform parent, string name, Vector3 position, Vector3 size, Color colour)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = name;
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = position;
-            go.transform.localScale = size;
-            go.GetComponent<MeshRenderer>().sharedMaterial = Flat(colour);
-            Disposable(go);
-            return go;
-        }
+        // ------------------------------------------------------------------
+        // Construction helpers
+        // ------------------------------------------------------------------
 
-        private static void Use(GameObject go, string prompt, float reach, System.Action action)
-        {
-            var interactable = go.AddComponent<Interactable>();
-            interactable.Prompt = prompt;
-            interactable.Reach = reach;
-            interactable.Used = action;
-        }
-
-        private static TextMesh Label(Transform parent, string name, Vector3 position, float size)
+        private GameObject Empty(Transform parent, string name, Vector3 position, Vector3 scale)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             go.transform.localPosition = position;
+            go.transform.localScale = scale;
             Disposable(go);
+            return go;
+        }
+
+        private GameObject Primitive(
+            PrimitiveType type, Transform parent, string name,
+            Vector3 position, Vector3 scale, Material material)
+        {
+            var go = GameObject.CreatePrimitive(type);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = position;
+            go.transform.localScale = scale;
+            go.GetComponent<MeshRenderer>().sharedMaterial = material;
+            Disposable(go);
+            return go;
+        }
+
+        /// <summary>
+        /// Marks a fixture as performing one of the shop's actions.
+        ///
+        /// Sets the SERIALISED enum, not the delegate. The controller binds the actual
+        /// method on Awake, so the fixture keeps working after being saved into a
+        /// prefab, duplicated, or moved across the room by hand.
+        /// </summary>
+        private static void Use(GameObject go, string prompt, float reach, ShopAction action)
+        {
+            var interactable = go.AddComponent<Interactable>();
+            interactable.Prompt = prompt;
+            interactable.Reach = reach;
+            interactable.Action = action;
+        }
+
+        private TextMesh Label(Transform parent, string name, Vector3 position, float size)
+        {
+            var go = Empty(parent, name, position, Vector3.one);
 
             var text = go.AddComponent<TextMesh>();
             text.characterSize = size;
@@ -427,39 +418,22 @@ namespace Gunsmith.Interaction
         }
 
         /// <summary>
-        /// Keeps an EDITOR-TIME preview out of the scene file.
+        /// Keeps a DISPOSABLE build out of the scene file.
         ///
-        /// Only in the editor, and that condition is the whole point. At runtime nothing
-        /// is serialised anyway, so the flag buys nothing there — and DontSave objects
-        /// are torn down on a domain reload, which is what made the shop and then the
-        /// player evaporate the moment Play was pressed. The flag was correct for
-        /// previews and wrong for the game; it now applies only where it was right.
+        /// Skipped entirely for a persistent build — that is the point of one — and
+        /// skipped at runtime, where nothing is serialised anyway and DontSave objects
+        /// are torn down by a domain reload. That last case is what once made the whole
+        /// shop, and then the player standing in it, evaporate the moment Play was
+        /// pressed.
         /// </summary>
-        private static void Disposable(GameObject go)
+        private void Disposable(GameObject go)
         {
+            if (_persistent) return;
             if (!Application.isPlaying) go.hideFlags = HideFlags.DontSave;
         }
 
-        private static Material Flat(Color colour)
-        {
-            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            var material = new Material(shader) { hideFlags = HideFlags.DontSave };
-            material.color = colour;
-            return material;
-        }
-
-        private static Material Translucent(Color colour)
-        {
-            var material = Flat(colour);
-            material.SetFloat("_Surface", 1f);
-            material.SetFloat("_Blend", 0f);
-            material.SetFloat("_ZWrite", 0f);
-            material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-            material.color = colour;
-            return material;
-        }
+        /// <summary>Palette slot if assigned, flat fallback colour otherwise.</summary>
+        private static Material Mat(Material assigned, Color fallback)
+            => WorkshopPalette.Resolve(assigned, fallback);
     }
 }

@@ -37,8 +37,15 @@ namespace Gunsmith.Interaction
         [Tooltip("Eye height, metres.")]
         public float EyeHeight = 1.65f;
 
-        /// <summary>The shop this built, once it has.</summary>
-        public WorkshopController Shop { get; private set; }
+        [Header("Authoring")]
+        [Tooltip("A hand-placed shop. Assign one — or just make it a child of this " +
+                 "object — and it is used as-is, so your layout survives pressing Play. " +
+                 "Leave empty and a throwaway one is built from code at startup.")]
+        public WorkshopController Shop;
+
+        [Tooltip("Surface materials for a code-built shop. Ignored when the shop is " +
+                 "hand-placed, since those objects carry their own.")]
+        public WorkshopPalette Palette;
 
         /// <summary>The body, once it exists.</summary>
         public PlayerRig Player { get; private set; }
@@ -49,11 +56,25 @@ namespace Gunsmith.Interaction
         }
 
         /// <summary>
-        /// Builds the shop and, optionally, the person standing in it.
+        /// Uses the shop that is already here, or builds one if there is not.
+        ///
+        /// PREFERRING AN EXISTING SHOP IS THE POINT. <see cref="Shop"/> used to be a
+        /// read-only property, so it was never serialised, so it was always null on
+        /// Awake, so the bootstrap rebuilt the shop from code every single time — which
+        /// meant a hand-placed bench was destroyed the instant you pressed Play. There
+        /// was no way to author the room by hand, and therefore no way to art-direct it.
+        ///
+        /// Now: an assigned or child <see cref="WorkshopController"/> wins, and the code
+        /// path is the fallback for a scene that has nothing in it yet.
         /// </summary>
         public void Build()
         {
-            if (Shop == null) Shop = WorkshopBuilder.Build(transform);
+            // A child counts even if the field was never wired up, so dragging the
+            // prefab under this object is enough.
+            if (Shop == null) Shop = GetComponentInChildren<WorkshopController>(includeInactive: true);
+
+            if (Shop == null) Shop = WorkshopBuilder.Build(transform, Palette);
+
             if (SpawnPlayer && Player == null) Player = BuildPlayer();
         }
 
@@ -94,17 +115,21 @@ namespace Gunsmith.Interaction
             // a whole class of "spawns somewhere odd" entirely.
             body.transform.position = transform.TransformPoint(PlayerStart);
 
+            // FLOOR PROBE FIRST, CONTROLLER SECOND. The order matters: a
+            // CharacterController is a collider, so probing after adding one means the
+            // downward ray hits the player's own capsule before it reaches the floor
+            // and stands him on top of his own head, a metre and a half in the air.
+            //
+            // Physics.SyncTransforms first, because a code-built floor was created this
+            // same frame and its collider is not in the physics scene until it is synced
+            // - without that the cast finds nothing and the player is dropped into space.
+            Physics.SyncTransforms();
+            StandOnFloor(body.transform);
+
             var controller = body.AddComponent<CharacterController>();
             controller.height = 1.8f;
             controller.radius = 0.3f;
             controller.center = new Vector3(0f, 0.9f, 0f);
-
-            // Put the feet ON the floor rather than trusting a hand-written height.
-            // Physics.SyncTransforms first, because the floor was created this same
-            // frame and its collider is not in the physics scene until it is synced -
-            // without this the cast finds nothing and the player is dropped into space.
-            Physics.SyncTransforms();
-            StandOnFloor(body.transform);
 
             var head = new GameObject("Head").transform;
             head.SetParent(body.transform, false);
@@ -156,7 +181,28 @@ namespace Gunsmith.Interaction
         {
             Vector3 above = body.position + Vector3.up * 4f;
 
-            if (!Physics.Raycast(above, Vector3.down, out var hit, 12f))
+            // RaycastAll and skip anything belonging to the body, rather than a plain
+            // Raycast. Calling this before the CharacterController exists is what
+            // actually fixes the self-hit, but this makes it stay fixed: the moment
+            // somebody hangs a collider off the player for a hitbox or a held item, a
+            // single-hit cast would quietly start landing him on himself again.
+            var hits = Physics.RaycastAll(above, Vector3.down, 12f, ~0, QueryTriggerInteraction.Ignore);
+
+            bool found = false;
+            float best = float.MaxValue;
+            Vector3 point = Vector3.zero;
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (hits[i].collider.transform.IsChildOf(body)) continue;
+                if (hits[i].distance >= best) continue;
+
+                best = hits[i].distance;
+                point = hits[i].point;
+                found = true;
+            }
+
+            if (!found)
             {
                 Debug.LogWarning("[Bootstrap] Nothing under the spawn point - the player " +
                                  "would fall. Leaving them where they are.");
@@ -165,7 +211,7 @@ namespace Gunsmith.Interaction
 
             // A hair above the surface so the controller settles rather than starting
             // interpenetrated, which makes it tunnel.
-            body.position = hit.point + Vector3.up * 0.05f;
+            body.position = point + Vector3.up * 0.05f;
         }
 
         private void Reset() => PlayerStart = new Vector3(0f, 1.0f, -3.2f);
