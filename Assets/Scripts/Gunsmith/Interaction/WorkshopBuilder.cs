@@ -109,10 +109,18 @@ namespace Gunsmith.Interaction
             yard.Rack = shop.Rack;
             shop.Yard = yard;
 
-            // On the back wall above the evidence rack, where you are already looking
-            // when you walk over to read a block. It was floating in mid-air off to the
-            // right, half of every line past the edge of the screen.
-            shop.Status = Label(root.transform, "Status", new Vector3(2.55f, 1.95f, 1.26f), 0.024f);
+            // NO STATUS READOUT. Deliberately none.
+            //
+            // This used to be a block of text floating on the back wall listing the day,
+            // the purse and the primer count. Nobody asked for it, it reads as graffiti
+            // scrawled on a gunsmith's wall, and a wall is not where a HUD goes. It was
+            // put there by me to stop it clipping off the edge of the screen, which
+            // solved the clipping and created a worse problem.
+            //
+            // WorkshopController.Refresh already handles a null Status, so the shop runs
+            // without one. Where this information belongs — a HUD, a ledger on the desk,
+            // a calendar by the door — is a design decision, not something to guess at.
+            shop.Status = null;
 
             BuildStationControls(root.transform, shop);
 

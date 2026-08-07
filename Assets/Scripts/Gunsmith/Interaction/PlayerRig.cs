@@ -72,17 +72,51 @@ namespace Gunsmith.Interaction
         /// <summary>The station being leaned over, or null when standing.</summary>
         public StationView Focused => _focus;
 
-        private void Awake()
-        {
-            _controller = GetComponent<CharacterController>();
+        private bool _restKnown;
 
-            if (Head == null) Head = transform;
-            _pitch = Head.localEulerAngles.x;
+        private void Awake() => _controller = GetComponent<CharacterController>();
+
+        private void Start()
+        {
+            // Last resort for a rig assembled by hand with the field left empty. By
+            // Start every Awake has run and anything that was going to assign Head has.
+            if (Head == null)
+            {
+                Head = transform;
+                Debug.LogWarning("[PlayerRig] No Head assigned; using the body. The eye " +
+                                 "will be at floor level.", this);
+            }
+
+            if (LockCursor) SetCursorLocked(true);
+        }
+
+        /// <summary>
+        /// Captures the eye's resting pose, the first frame <see cref="Head"/> is known.
+        ///
+        /// NOT IN AWAKE, AND THAT IS THE ENTIRE POINT. `WorkshopBootstrap` adds this
+        /// component and assigns Head on the NEXT LINE, so Awake ran one line too early:
+        /// Head was null, the old code fell back to the body transform, and cached the
+        /// BODY'S WORLD POSITION as the head's local rest offset. LateUpdate then forced
+        /// the head to that every frame — putting the eye ten centimetres off the floor
+        /// and three metres behind the body, which looks exactly like a broken
+        /// third-person camera and makes the whole shop unusable.
+        ///
+        /// Resolving lazily means it does not matter what order anything is wired in.
+        /// </summary>
+        private bool ResolveHead()
+        {
+            if (_restKnown) return true;
+            if (Head == null) return false;
 
             _restLocalPosition = Head.localPosition;
+            _pitch = Head.localEulerAngles.x;
+
             _camera = Head.GetComponentInChildren<Camera>();
             if (_camera == null) _camera = Camera.main;
             if (_camera != null) _restFieldOfView = _camera.fieldOfView;
+
+            _restKnown = true;
+            return true;
         }
 
         /// <summary>
@@ -113,15 +147,12 @@ namespace Gunsmith.Interaction
             else Focus(station);
         }
 
-        private void Start()
-        {
-            if (LockCursor) SetCursorLocked(true);
-        }
-
         private void OnDisable() => SetCursorLocked(false);
 
         private void Update()
         {
+            if (!ResolveHead()) return;
+
             HandleCursor();
 
             // Standing still while leaning over a station. Walking away from the bench
@@ -162,6 +193,8 @@ namespace Gunsmith.Interaction
         /// </summary>
         private void LateUpdate()
         {
+            if (!ResolveHead()) return;
+
             float target = _focus != null ? 1f : 0f;
 
             if (FocusSeconds > 0.001f)

@@ -100,7 +100,11 @@ namespace Gunsmith.Tests
         [Test]
         public void The_Status_Readout_Fits_The_Space_It_Is_Given()
         {
-            Assert.That(_shop.Status, Is.Not.Null);
+            // The shop ships without a status readout — see WorkshopBuilder. These two
+            // tests stay so that if one is ever added back, it is held to the same rule
+            // the order cards are: it must fit the space it is given.
+            if (_shop.Status == null)
+                Assert.Pass("no status readout in the shop; nothing to fit");
 
             var rendered = _shop.Status.GetComponent<Renderer>().bounds.size;
 
@@ -114,6 +118,9 @@ namespace Gunsmith.Tests
         {
             // Fit MULTIPLIES the scale, so re-fitting an already-fitted label every
             // refresh would drive it to nothing over a few in-game days.
+            if (_shop.Status == null)
+                Assert.Pass("no status readout in the shop; nothing to shrink");
+
             _shop.Refresh();
             float first = _shop.Status.GetComponent<Renderer>().bounds.size.x;
 

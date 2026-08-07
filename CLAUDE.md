@@ -409,7 +409,7 @@ unstable, and ruinously expensive.
 
 ## Verification practice
 
-All three suites stay green: **199/199 EditMode and 3/3 PlayMode in Unity, 70/70
+All three suites stay green: **199/199 EditMode and 8/8 PlayMode in Unity, 70/70
 outside** via `dotnet test`. The outside-Unity run is what proves the core is still
 portable to the other project — if it breaks, a Unity dependency leaked into the core.
 
