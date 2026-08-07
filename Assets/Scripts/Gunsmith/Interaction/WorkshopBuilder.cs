@@ -37,10 +37,35 @@ namespace Gunsmith.Interaction
     /// </summary>
     public sealed class WorkshopBuilder
     {
-        private const float BenchScale = 0.45f;
         private const float RackScale = 0.90f;
         private const float BoardScale = 0.85f;
-        private const float BulletDisplayScale = 40f;
+
+        /// <summary>
+        /// TRUE SIZE. Not a display factor — there is deliberately no longer one.
+        ///
+        /// The bench used to inflate its cartridges 40x and its powder 900x, so a 13 mm
+        /// round rendered 23 cm long and a grain of powder came out the size of a
+        /// baseball. It was done for an honest reason — a real cartridge on a waist-high
+        /// bench seen from standing is about four pixels — but the cure was worse than
+        /// the disease, and no amount of tuning fixes it: a cartridge scaled to be
+        /// legible from standing height has stopped being a cartridge.
+        ///
+        /// A gunsmith does not enlarge the round. He leans in. <see cref="StationView"/>
+        /// moves the eye to the work and narrows the field of view instead, which costs
+        /// nothing and is what a person actually does.
+        /// </summary>
+        private const float TrueScale = 1f;
+
+        /// <summary>
+        /// Powder is the one exception, and a small one.
+        ///
+        /// The sim's web thickness is a BURN DISTANCE, not the size of a granule — 35
+        /// micrometres for a fast pistol powder — so drawing spheres of that diameter
+        /// would show nothing at all. This lifts them to about a millimetre, which is
+        /// roughly what a real ball-powder granule measures. It is a correction towards
+        /// life size, not away from it.
+        /// </summary>
+        private const float GrainLegibility = 14f;
 
         private readonly WorkshopPalette _palette;
         private readonly bool _persistent;
@@ -164,11 +189,14 @@ namespace Gunsmith.Interaction
 
         private LoadingPress BuildBench(Transform parent)
         {
+            // A real bench: 2.4 m long, 70 cm deep, work surface at 92 cm. Everything on
+            // it is placed in metres from here on, because everything on it is now the
+            // size it really is.
             var bench = Empty(parent, "Bench",
-                new Vector3(0f, 1.15f, 0.9f), Vector3.one * BenchScale);
+                new Vector3(0f, 0.92f, 0.85f), Vector3.one * TrueScale);
 
             Primitive(PrimitiveType.Cube, bench.transform, "Bench top",
-                new Vector3(0f, -0.55f, 0f), new Vector3(7f, 0.12f, 1.6f),
+                new Vector3(0f, -0.03f, 0f), new Vector3(2.4f, 0.06f, 0.7f),
                 Mat(_palette?.BenchTop, Defaults.BenchTop));
 
             var station = BuildLathe(bench.transform);
@@ -187,14 +215,15 @@ namespace Gunsmith.Interaction
 
         private LatheStation BuildLathe(Transform parent)
         {
-            var go = Empty(parent, "Core bench", Vector3.zero, Vector3.one);
+            var go = Empty(parent, "Core bench", new Vector3(0.25f, 0.02f, 0f), Vector3.one);
+            LeanIn(go, "turn the bullet", new Vector3(0f, 0.11f, -0.13f), fieldOfView: 18f);
 
             var station = go.AddComponent<LatheStation>();
             station.Geometry = ProjectileGeometry.Default9mmFmj;
             station.ValidMaterial = Mat(_palette?.Projectile, Defaults.Projectile);
             station.InvalidMaterial = Mat(_palette?.ProjectileInvalid, Defaults.ProjectileInvalid);
 
-            var rig = Empty(go.transform, "Rig", Vector3.zero, Vector3.one * BulletDisplayScale).transform;
+            var rig = Empty(go.transform, "Rig", Vector3.zero, Vector3.one * TrueScale).transform;
             rig.localRotation = Quaternion.Euler(0f, -90f, 0f);
             station.Rig = rig;
 
@@ -213,8 +242,8 @@ namespace Gunsmith.Interaction
             AddHandle(station, rig, LatheOperation.BoattailAngle, "Boattail angle");
             AddHandle(station, rig, LatheOperation.JacketThickness, "Jacket");
 
-            station.ScaleReadout = Label(go.transform, "Scale", new Vector3(0f, -0.34f, 0f), 0.012f);
-            station.Complaint = Label(go.transform, "Complaint", new Vector3(0f, -0.46f, 0f), 0.007f);
+            station.ScaleReadout = Label(go.transform, "Scale", new Vector3(0f, 0.055f, 0f), 0.0016f);
+            station.Complaint = Label(go.transform, "Complaint", new Vector3(0f, -0.030f, 0f), 0.0011f);
             station.Complaint.color = new Color(0.95f, 0.35f, 0.30f);
 
             station.Rebuild();
@@ -230,8 +259,10 @@ namespace Gunsmith.Interaction
                 ? _palette.ResolveHandle(index, fallback)
                 : WorkshopPalette.Flat(fallback);
 
+            // 2.5 mm, which is a bead you can pinch. It has to be grabbable while leaning
+            // in over a 13 mm bullet without burying the bullet underneath it.
             var go = Primitive(PrimitiveType.Sphere, rig, label,
-                Vector3.zero, Vector3.one * 0.0014f, material);
+                Vector3.zero, Vector3.one * 0.0025f, material);
 
             var handle = go.AddComponent<LatheHandle>();
             handle.Operation = operation;
@@ -242,19 +273,22 @@ namespace Gunsmith.Interaction
 
         private PropellantMill BuildMill(Transform parent)
         {
-            var go = Empty(parent, "Propellant mill", new Vector3(-2.1f, -0.15f, 0f), Vector3.one);
+            var go = Empty(parent, "Propellant mill", new Vector3(-0.85f, 0.01f, 0f), Vector3.one);
+            LeanIn(go, "mill the powder", new Vector3(0f, 0.13f, -0.15f), fieldOfView: 24f);
 
             var mill = go.AddComponent<PropellantMill>();
             mill.GrainMaterial = Mat(_palette?.PowderGrain, Defaults.PowderGrain);
 
-            var tray = Empty(go.transform, "Grain tray", Vector3.zero, Vector3.one * 900f).transform;
+            var tray = Empty(go.transform, "Grain tray",
+                new Vector3(0f, 0.004f, 0f), Vector3.one * GrainLegibility).transform;
             mill.GrainTray = tray;
 
+            // An 8 cm sample pan, which is what one actually is.
             Primitive(PrimitiveType.Cylinder, go.transform, "Pan",
-                new Vector3(0f, -0.012f, 0f), new Vector3(0.30f, 0.008f, 0.30f),
+                new Vector3(0f, 0f, 0f), new Vector3(0.08f, 0.004f, 0.08f),
                 Mat(_palette?.Metal, Defaults.Metal));
 
-            mill.Readout = Label(go.transform, "Mill readout", new Vector3(0f, -0.14f, 0f), 0.008f);
+            mill.Readout = Label(go.transform, "Mill readout", new Vector3(0f, -0.028f, 0f), 0.0013f);
 
             mill.SetShape(GrainShape.Sphere);
             mill.SetWeb(3.5e-5);
@@ -264,7 +298,8 @@ namespace Gunsmith.Interaction
 
         private PowderBalance BuildBalance(Transform parent)
         {
-            var go = Empty(parent, "Powder balance", new Vector3(-1.1f, 0.25f, 0f), Vector3.one);
+            var go = Empty(parent, "Powder balance", new Vector3(-0.30f, 0.02f, 0f), Vector3.one);
+            LeanIn(go, "weigh the charge", new Vector3(0.03f, 0.12f, -0.16f), fieldOfView: 26f);
 
             var balance = go.AddComponent<PowderBalance>();
             balance.BeamTravel = 0.30;
@@ -273,21 +308,22 @@ namespace Gunsmith.Interaction
             var beam = Empty(go.transform, "Beam", Vector3.zero, Vector3.one).transform;
             balance.Beam = beam;
 
+            // A 26 cm beam, which is about what a real powder scale has.
             Primitive(PrimitiveType.Cube, beam, "Bar",
-                new Vector3(0.10f, 0f, 0f), new Vector3(0.44f, 0.012f, 0.012f),
+                new Vector3(0.06f, 0.03f, 0f), new Vector3(0.26f, 0.007f, 0.007f),
                 Mat(_palette?.Metal, Defaults.Metal));
 
             var poise = Primitive(PrimitiveType.Cube, beam, "Poise",
-                Vector3.zero, new Vector3(0.022f, 0.05f, 0.05f),
+                new Vector3(0f, 0.03f, 0f), new Vector3(0.012f, 0.026f, 0.026f),
                 Mat(_palette?.Poise, Defaults.Poise));
             balance.Poise = poise.transform;
 
             var pan = Primitive(PrimitiveType.Cylinder, beam, "Pan",
-                new Vector3(-0.13f, -0.05f, 0f), new Vector3(0.10f, 0.012f, 0.10f),
+                new Vector3(-0.075f, 0.012f, 0f), new Vector3(0.055f, 0.005f, 0.055f),
                 Mat(_palette?.Metal, Defaults.Metal));
             balance.Pan = pan.transform;
 
-            balance.BeamReadout = Label(go.transform, "Beam readout", new Vector3(0.10f, -0.16f, 0f), 0.010f);
+            balance.BeamReadout = Label(go.transform, "Beam readout", new Vector3(0.06f, -0.012f, 0f), 0.0015f);
 
             balance.SettingGrains = 5.5;
             balance.Trickle(5.5);
@@ -296,12 +332,13 @@ namespace Gunsmith.Interaction
 
         private SeatingStop BuildDie(Transform parent, LatheStation station)
         {
-            var go = Empty(parent, "Seating die", new Vector3(1.6f, 0f, 0f), Vector3.one);
+            var go = Empty(parent, "Seating die", new Vector3(0.80f, 0.01f, 0f), Vector3.one);
+            LeanIn(go, "set the seating depth", new Vector3(0f, 0.10f, -0.12f), fieldOfView: 18f);
 
             var die = go.AddComponent<SeatingStop>();
             die.Projectile = station.Geometry;
 
-            var rig = Empty(go.transform, "Rig", Vector3.zero, Vector3.one * BulletDisplayScale).transform;
+            var rig = Empty(go.transform, "Rig", Vector3.zero, Vector3.one * TrueScale).transform;
             rig.localRotation = Quaternion.Euler(0f, -90f, 0f);
 
             var casing = Primitive(PrimitiveType.Cylinder, rig, "Case",
@@ -322,7 +359,7 @@ namespace Gunsmith.Interaction
                 Mat(_palette?.SeatingStop, Defaults.SeatingStop));
             die.Stop = stop.transform;
 
-            die.DepthReadout = Label(go.transform, "Die readout", new Vector3(0f, -0.16f, 0f), 0.008f);
+            die.DepthReadout = Label(go.transform, "Die readout", new Vector3(0f, -0.022f, 0f), 0.0013f);
             die.Depth = 0.0030;
             return die;
         }
@@ -372,6 +409,38 @@ namespace Gunsmith.Interaction
         // ------------------------------------------------------------------
         // Construction helpers
         // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Makes a station something you can walk up to and lean over.
+        ///
+        /// This is what pays for true scale. The work stays 13 mm across; pressing E
+        /// brings the eye to <paramref name="eyeOffset"/> and narrows the lens, and a
+        /// real cartridge fills the screen because you are looking at it from 15 cm
+        /// away rather than because somebody made it 23 cm long.
+        /// </summary>
+        private void LeanIn(GameObject station, string prompt, Vector3 eyeOffset, float fieldOfView)
+        {
+            var view = station.AddComponent<StationView>();
+            view.EyeOffset = eyeOffset;
+            view.LookOffset = Vector3.zero;
+            view.FieldOfView = fieldOfView;
+
+            // A trigger, not a solid box. It has to be hittable by the interaction ray
+            // without becoming a knee-high wall the player cannot walk past — these sit
+            // right at bench height, in the middle of the room.
+            var box = station.AddComponent<BoxCollider>();
+            box.center = new Vector3(0f, 0.02f, 0f);
+            box.size = new Vector3(0.17f, 0.10f, 0.17f);
+            box.isTrigger = true;
+
+            var interactable = station.AddComponent<Interactable>();
+            interactable.Prompt = prompt;
+            interactable.Reach = 1.5f;
+
+            // No ShopAction: leaning in IS what this does. WorkshopController skips the
+            // "nothing bound this" warning for anything carrying a StationView.
+            interactable.Action = ShopAction.None;
+        }
 
         private GameObject Empty(Transform parent, string name, Vector3 position, Vector3 scale)
         {

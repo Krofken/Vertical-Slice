@@ -47,9 +47,58 @@ namespace Gunsmith.Tests
             Assert.That(fixtures.Length, Is.GreaterThan(0), "the shop has no fixtures at all");
 
             foreach (var fixture in fixtures)
+            {
+                // A station you lean over declares its intent with a StationView rather
+                // than a ShopAction — the action is "bring my eye to the work".
+                if (fixture.GetComponentInParent<StationView>() != null) continue;
+
                 Assert.That(fixture.Action, Is.Not.EqualTo(ShopAction.None),
                     $"'{fixture.name}' has no serialised action, so it would come back " +
                     "from a prefab inert");
+            }
+        }
+
+        [Test]
+        public void Every_Bench_Station_Can_Be_Leaned_Over()
+        {
+            // True scale only works because the camera comes to the work. A station with
+            // no StationView is a station you can never actually see.
+            var shop = BuildPersistent();
+
+            foreach (var name in new[] { "Core bench", "Propellant mill", "Powder balance", "Seating die" })
+            {
+                var station = shop.GetComponentsInChildren<Transform>(true)
+                    .FirstOrDefault(t => t.name == name);
+
+                Assert.That(station, Is.Not.Null, $"'{name}' is missing from the bench");
+                Assert.That(station.GetComponent<StationView>(), Is.Not.Null,
+                    $"'{name}' cannot be leaned over, so at true scale it is unreadable");
+            }
+        }
+
+        [Test]
+        public void Nothing_On_The_Bench_Is_Faked_Larger_Than_Life()
+        {
+            // THE REGRESSION THAT MATTERS. The bench used to inflate cartridges 40x and
+            // powder 900x, so a 13 mm round rendered 23 cm long. A 9 mm bullet must
+            // measure 9 mm across, whatever else changes.
+            var shop = BuildPersistent();
+
+            var lathe = shop.GetComponentInChildren<Gunsmith.Crafting.LatheStation>(true);
+            Assert.That(lathe, Is.Not.Null);
+            Assert.That(lathe.Rig, Is.Not.Null);
+
+            float rigScale = lathe.Rig.lossyScale.x;
+            Assert.That(rigScale, Is.EqualTo(1f).Within(0.001f),
+                "the projectile rig is scaled, so the bullet is not life size");
+
+            var bullet = lathe.BulletRenderer;
+            if (bullet != null && bullet.bounds.size.sqrMagnitude > 1e-12f)
+            {
+                float width = bullet.bounds.size.x;
+                Assert.That(width, Is.LessThan(0.02f),
+                    $"the bullet renders {width * 100f:F1} cm across; a 9 mm round is 0.9 cm");
+            }
         }
 
         [Test]
@@ -58,11 +107,17 @@ namespace Gunsmith.Tests
             // Exactly what deserialisation does: the enum comes back, the delegate does
             // not. If BindFixtures cannot recover from this, a saved shop is dead.
             var shop = BuildPersistent();
-            var fixtures = shop.GetComponentsInChildren<Interactable>(true);
+
+            // Lean-in stations are excluded on purpose: their action is "bring my eye
+            // to the work", which PlayerInteractor performs from the StationView. They
+            // have no delegate to lose.
+            var fixtures = shop.GetComponentsInChildren<Interactable>(true)
+                .Where(f => f.GetComponentInParent<StationView>() == null)
+                .ToArray();
+
+            Assert.That(fixtures.Length, Is.GreaterThan(0), "nothing to test");
 
             foreach (var fixture in fixtures) fixture.Used = null;
-            Assert.That(fixtures.All(f => f.Used == null), Is.True, "setup failed to clear");
-
             shop.BindFixtures();
 
             foreach (var fixture in fixtures)

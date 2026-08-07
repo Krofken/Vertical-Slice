@@ -48,9 +48,29 @@ namespace Gunsmith.Interaction
                  "whenever you are working the bench rather than walking.")]
         public bool LockCursor = true;
 
+        [Header("Leaning in")]
+        [Tooltip("Seconds to move between standing and working at a station.")]
+        public float FocusSeconds = 0.28f;
+
         private CharacterController _controller;
         private float _pitch;
         private float _fallSpeed;
+
+        // ---- Focus ---------------------------------------------------------
+        private StationView _focus;
+        private float _blend;
+        private Vector3 _restLocalPosition;
+        private float _restFieldOfView = 60f;
+        private Camera _camera;
+
+        // Held so the blend BACK to standing still has somewhere to come from after
+        // the station reference is cleared.
+        private Vector3 _focusPosition;
+        private Quaternion _focusRotation;
+        private float _focusFieldOfView = 22f;
+
+        /// <summary>The station being leaned over, or null when standing.</summary>
+        public StationView Focused => _focus;
 
         private void Awake()
         {
@@ -58,6 +78,39 @@ namespace Gunsmith.Interaction
 
             if (Head == null) Head = transform;
             _pitch = Head.localEulerAngles.x;
+
+            _restLocalPosition = Head.localPosition;
+            _camera = Head.GetComponentInChildren<Camera>();
+            if (_camera == null) _camera = Camera.main;
+            if (_camera != null) _restFieldOfView = _camera.fieldOfView;
+        }
+
+        /// <summary>
+        /// Leans in over a station: the eye moves to its working position and the field
+        /// of view narrows to a loupe. The cursor is released, because at the bench the
+        /// mouse belongs to the work rather than to looking around.
+        /// </summary>
+        public void Focus(StationView station)
+        {
+            if (station == null) return;
+
+            _focus = station;
+            _focusFieldOfView = station.FieldOfView;
+            SetCursorLocked(false);
+        }
+
+        /// <summary>Stands back up.</summary>
+        public void Unfocus()
+        {
+            _focus = null;
+            SetCursorLocked(true);
+        }
+
+        /// <summary>Leans in, or stands up if already leaning over this one.</summary>
+        public void ToggleFocus(StationView station)
+        {
+            if (_focus == station) Unfocus();
+            else Focus(station);
         }
 
         private void Start()
@@ -71,6 +124,10 @@ namespace Gunsmith.Interaction
         {
             HandleCursor();
 
+            // Standing still while leaning over a station. Walking away from the bench
+            // with your eye still on it would be nonsense, and the mouse is busy.
+            if (_focus != null) return;
+
             // Only steer while the cursor is captured, so releasing it hands the mouse
             // back to the bench without spinning the room.
             if (Cursor.lockState == CursorLockMode.Locked) Look();
@@ -81,12 +138,61 @@ namespace Gunsmith.Interaction
         private void HandleCursor()
         {
             var keyboard = Keyboard.current;
-            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) SetCursorLocked(false);
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
+            {
+                // Escape stands you up first. Only once you are standing does it hand
+                // the cursor back — otherwise one key would do two things at once and
+                // you could never leave a station without also losing mouse look.
+                if (_focus != null) Unfocus();
+                else SetCursorLocked(false);
+            }
 
             var mouse = Mouse.current;
-            if (mouse != null && Cursor.lockState != CursorLockMode.Locked
+            if (mouse != null && _focus == null && Cursor.lockState != CursorLockMode.Locked
                 && mouse.rightButton.wasPressedThisFrame)
                 SetCursorLocked(true);
+        }
+
+        /// <summary>
+        /// Drives the eye between standing and leaning in.
+        ///
+        /// LateUpdate, and it writes Head's WORLD pose directly. The head is a child of
+        /// the body, so anything written in Update would be overwritten by the parent's
+        /// own movement in the same frame.
+        /// </summary>
+        private void LateUpdate()
+        {
+            float target = _focus != null ? 1f : 0f;
+
+            if (FocusSeconds > 0.001f)
+                _blend = Mathf.MoveTowards(_blend, target, Time.deltaTime / FocusSeconds);
+            else
+                _blend = target;
+
+            // Standing, and settled: leave the head exactly where the look code put it.
+            if (_blend <= 0.0001f)
+            {
+                Head.localPosition = _restLocalPosition;
+                if (_camera != null) _camera.fieldOfView = _restFieldOfView;
+                return;
+            }
+
+            if (_focus != null)
+            {
+                _focusPosition = _focus.EyePosition;
+                _focusRotation = _focus.EyeRotation;
+            }
+
+            // Where the eye would be if it were not leaning in at all.
+            Vector3 standingPosition = transform.TransformPoint(_restLocalPosition);
+            Quaternion standingRotation = transform.rotation * Quaternion.Euler(_pitch, 0f, 0f);
+
+            Head.SetPositionAndRotation(
+                Vector3.Lerp(standingPosition, _focusPosition, _blend),
+                Quaternion.Slerp(standingRotation, _focusRotation, _blend));
+
+            if (_camera != null)
+                _camera.fieldOfView = Mathf.Lerp(_restFieldOfView, _focusFieldOfView, _blend);
         }
 
         private static void SetCursorLocked(bool locked)

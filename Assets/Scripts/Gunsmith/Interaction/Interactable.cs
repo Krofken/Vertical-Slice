@@ -115,6 +115,9 @@ namespace Gunsmith.Interaction
         public TextMesh Prompt;
 
         private Interactable _looking;
+        private PlayerRig _rig;
+
+        private void Awake() => _rig = GetComponentInParent<PlayerRig>();
 
         private void Update()
         {
@@ -131,8 +134,14 @@ namespace Gunsmith.Interaction
                 Prompt.text = _looking != null ? $"[{UseKey}]  {_looking.Prompt}" : string.Empty;
 
             var keyboard = Keyboard.current;
-            if (_looking != null && keyboard != null && keyboard[UseKey].wasPressedThisFrame)
-                _looking.Use();
+            if (_looking == null || keyboard == null || !keyboard[UseKey].wasPressedThisFrame) return;
+
+            // A station you can lean over gets leaned over. Everything else — the cot,
+            // the counter, the press handle — just does its thing where it stands.
+            var station = _looking.GetComponentInParent<StationView>();
+            if (station != null && _rig != null) _rig.ToggleFocus(station);
+
+            _looking.Use();
         }
 
         /// <summary>Nearest interactable the player is actually facing, or null.</summary>

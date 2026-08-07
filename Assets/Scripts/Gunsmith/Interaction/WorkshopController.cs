@@ -98,8 +98,11 @@ namespace Gunsmith.Interaction
                     case ShopAction.TurnInForTheNight: fixture.Used = Advance; break;
 
                     case ShopAction.None:
-                        // Left for a fixture wired directly in code. Only worth
-                        // complaining about if nothing set it either.
+                        // A station you lean over needs no action — leaning in is the
+                        // action. Everything else with no action and nothing bound is a
+                        // fixture that will silently do nothing when used.
+                        if (fixture.GetComponentInParent<StationView>() != null) break;
+
                         if (fixture.Used == null)
                             Debug.LogWarning(
                                 $"[Shop] '{fixture.name}' has no action set and nothing bound it. " +
