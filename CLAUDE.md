@@ -170,7 +170,7 @@ while the rest sat hardcoded and invisible. The player works four stations:
 | Station | What it sets | State |
 |---|---|---|
 | **Propellant mill** | base chemistry, grain shape, web thickness, deterrent coating | **built** |
-| **Core bench (lathe)** | projectile geometry, and the materials it is made of | shape **built**, materials missing |
+| **Core bench (lathe)** | projectile geometry, and the materials it is made of | **built** |
 | **Press** | assembles case + primer + charge + bullet into rounds | `AmmunitionWorkshop.Craft` exists, no tool |
 | **Case and primer** | case geometry, primer chemistry | **deferred — see below** |
 
@@ -192,6 +192,13 @@ whole thing work. Instead the numbers live **on the tools, diegetically**:
   feel. The scale hands over **what was actually weighed**, not what was dialled.
 - **The bullet is turned on a lathe**, live mesh reshaping as you work. **Built** —
   `LatheStation` plus `LatheHandle`, one handle per dimension.
+- **The stock is chucked, not chosen from a menu.** **Built** — `LatheStation.StockRack`
+  is ordered soft to hard, because stepping along it is stepping along the one comparison
+  the terminal solver makes: impact stagnation pressure against the nose's yield
+  strength. The work takes the colour of the stock in the chuck, and unknown or exotic
+  stock is shaded by density so a registered fantasy material looks like something heavy
+  without anyone picking a swatch for it. `PayloadRack` packs the cavity, and emptying it
+  again is always reachable.
 - **Weigh the finished bullet.** One number, on a scale — the one that matters most.
   **Built.**
 - **Seat the bullet against a physical stop**, so seating depth is set on a tool.

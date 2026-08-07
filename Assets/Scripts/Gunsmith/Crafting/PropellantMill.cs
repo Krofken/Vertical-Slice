@@ -126,8 +126,28 @@ namespace Gunsmith.Crafting
         /// </summary>
         public double PackingFraction => GrainGeometry.Create(Shape, _webThickness, _deterrentCoating).PackingFraction;
 
+        private bool _trayDirty;
+
         private void OnEnable() => Refresh();
-        private void OnValidate() => Refresh();
+
+        /// <summary>
+        /// Unity forbids DestroyImmediate inside OnValidate, so the tray cannot be torn
+        /// down here. Flag it and let Update do it a frame later — the readout is safe
+        /// to update immediately either way.
+        /// </summary>
+        private void OnValidate()
+        {
+            RefreshReadout();
+            _trayDirty = true;
+        }
+
+        private void Update()
+        {
+            if (!_trayDirty) return;
+
+            _trayDirty = false;
+            RebuildTray();
+        }
 
         // ------------------------------------------------------------------
 
@@ -182,6 +202,12 @@ namespace Gunsmith.Crafting
 
         private void Refresh()
         {
+            RefreshReadout();
+            RebuildTray();
+        }
+
+        private void RefreshReadout()
+        {
             if (Readout != null)
             {
                 // Dimensions and observations only. Nothing here says how it will shoot.
@@ -193,8 +219,6 @@ namespace Gunsmith.Crafting
                     $"{name}\n{Shape}\n{WebMillimetres:F3} mm grain\n{BurnCharacter}" +
                     (_deterrentCoating > 0.005 ? "\ncoated" : "\nuncoated");
             }
-
-            RebuildTray();
         }
 
         /// <summary>

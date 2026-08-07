@@ -50,7 +50,7 @@ namespace Gunsmith.EditorTools
             station.BulletRenderer = bullet.AddComponent<MeshRenderer>();
 
             // ---- the handles ---------------------------------------------
-            station.Handles = new Transform[8];
+            station.Handles = new Transform[LatheStation.OperationCount];
 
             AddHandle(station, rig, LatheOperation.MeplatDiameter, "Meplat", new Color(0.95f, 0.80f, 0.25f));
             AddHandle(station, rig, LatheOperation.CavityMouth, "Cavity mouth", new Color(0.95f, 0.45f, 0.25f));
@@ -60,6 +60,7 @@ namespace Gunsmith.EditorTools
             AddHandle(station, rig, LatheOperation.BearingSurface, "Bearing surface", new Color(0.60f, 0.60f, 0.95f));
             AddHandle(station, rig, LatheOperation.BoattailLength, "Boattail length", new Color(0.80f, 0.55f, 0.95f));
             AddHandle(station, rig, LatheOperation.BoattailAngle, "Boattail angle", new Color(0.95f, 0.95f, 0.95f));
+            AddHandle(station, rig, LatheOperation.JacketThickness, "Jacket thickness", new Color(0.95f, 0.55f, 0.75f));
 
             // ---- the scale -----------------------------------------------
             // The one number the bench is allowed to show: what the finished bullet

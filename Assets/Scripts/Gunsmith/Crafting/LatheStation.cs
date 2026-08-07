@@ -14,7 +14,11 @@ namespace Gunsmith.Crafting
         OgiveShape,
         BearingSurface,
         BoattailLength,
-        BoattailAngle
+        BoattailAngle,
+
+        /// <summary>Jacket wall thickness. A thick jacket resists expansion; a thin one
+        /// lets the core drive it open. Unreachable before, like the propellant was.</summary>
+        JacketThickness
     }
 
     /// <summary>
@@ -47,9 +51,52 @@ namespace Gunsmith.Crafting
         [Tooltip("The projectile being turned. Every solver reads these same numbers.")]
         public ProjectileGeometry Geometry = ProjectileGeometry.Default9mmFmj;
 
-        [Tooltip("What it is made of. Decides what the scale reads.")]
+        [Tooltip("Stock chucked for the core. Decides what the scale reads and whether " +
+                 "the nose yields on impact.")]
         public string CoreMaterialId = MaterialLibrary.Lead;
+
+        [Tooltip("Stock drawn for the jacket. Ignored when jacket thickness is zero.")]
         public string JacketMaterialId = MaterialLibrary.GildingMetal;
+
+        [Tooltip("Packed into the nose cavity, or empty. Filling it turns a hollow " +
+                 "point into a payload round.")]
+        public string CavityFillMaterialId;
+
+        /// <summary>
+        /// Stock the bench keeps on the rack, in the order the selector walks them.
+        ///
+        /// Ordered soft to hard on purpose: stepping along the rack is stepping along
+        /// the one comparison that decides whether a nose mushrooms or drives straight
+        /// through — impact stagnation pressure against the stock's yield strength.
+        /// Exotic entries belong here too; the canon is explicit that fantasy materials
+        /// are rare and expensive rather than forbidden.
+        /// </summary>
+        public static readonly string[] StockRack =
+        {
+            MaterialLibrary.Polymer,
+            MaterialLibrary.Aluminium,
+            MaterialLibrary.Zinc,
+            MaterialLibrary.Lead,
+            MaterialLibrary.Bismuth,
+            MaterialLibrary.HardenedLead,
+            MaterialLibrary.SinteredIron,
+            MaterialLibrary.Copper,
+            MaterialLibrary.GildingMetal,
+            MaterialLibrary.CartridgeBrass,
+            MaterialLibrary.MildSteel,
+            MaterialLibrary.HardenedSteel,
+            MaterialLibrary.TungstenHeavyAlloy,
+            MaterialLibrary.TungstenCarbide
+        };
+
+        /// <summary>What the cavity can be packed with. Null is an empty cavity, which
+        /// is what makes a hollow point expand rather than carry something.</summary>
+        public static readonly string[] PayloadRack =
+        {
+            null,
+            MaterialLibrary.PhosphorusCompound,
+            MaterialLibrary.Thermite
+        };
 
         [Header("Rig")]
         [Tooltip("Parent of the mesh and the handles. Scaled up, because a real 9 mm " +
@@ -73,12 +120,16 @@ namespace Gunsmith.Crafting
         [Range(8, 64)] public int RadialSegments = 32;
         [Range(8, 64)] public int NoseSegments = 40;
 
+        /// <summary>Number of cuts the lathe offers. Derived from the enum so adding an
+        /// operation cannot silently leave a handle unwired.</summary>
+        public static readonly int OperationCount = System.Enum.GetValues(typeof(LatheOperation)).Length;
+
         /// <summary>Handles, indexed by the operation they cut. Assigned by the setup
         /// tool; any that are null are simply not offered.</summary>
-        public Transform[] Handles = new Transform[8];
+        public Transform[] Handles = new Transform[OperationCount];
 
-        private readonly Vector3[] _placed = new Vector3[8];
-        private readonly bool[] _hasPlaced = new bool[8];
+        private readonly Vector3[] _placed = new Vector3[OperationCount];
+        private readonly bool[] _hasPlaced = new bool[OperationCount];
 
         private Mesh _mesh;
         private ProjectileMeshBuilder.Buffers _buffers;
@@ -104,7 +155,107 @@ namespace Gunsmith.Crafting
         public double BaseDiameterMm => Geometry.BaseDiameter * 1000.0;
         public double BoattailAngleDegrees => Geometry.BoattailAngle * RadiansToDegrees;
         public double NoseLengthInCalibres => Geometry.NoseLengthInCalibres;
+        public double JacketThicknessMm => Geometry.JacketThickness * 1000.0;
         public bool IsHollowPoint => Geometry.IsHollowPoint;
+
+        /// <summary>True once the cavity carries something instead of being a void. A
+        /// packed cavity stops promoting expansion and becomes a payload.</summary>
+        public bool HasPayload => !string.IsNullOrEmpty(CavityFillMaterialId) && Geometry.CavityDepth > 0.0;
+
+        public string CoreMaterialName => NameOf(CoreMaterialId);
+        public string JacketMaterialName => NameOf(JacketMaterialId);
+        public string CavityFillName => string.IsNullOrEmpty(CavityFillMaterialId)
+            ? "empty" : NameOf(CavityFillMaterialId);
+
+        private static string NameOf(string id)
+            => MaterialLibrary.TryGet(id, out var material) ? material.DisplayName : id;
+
+        // ------------------------------------------------------------------
+        // The stock rack
+        // ------------------------------------------------------------------
+
+        /// <summary>Chucks the next stock along the rack for the core.</summary>
+        public void NextCoreMaterial() { CoreMaterialId = Advance(StockRack, CoreMaterialId); Rebuild(); }
+
+        /// <summary>Draws the next stock along the rack for the jacket.</summary>
+        public void NextJacketMaterial() { JacketMaterialId = Advance(StockRack, JacketMaterialId); Rebuild(); }
+
+        /// <summary>Packs the cavity with the next filler, or empties it.</summary>
+        public void NextCavityFill() { CavityFillMaterialId = Advance(PayloadRack, CavityFillMaterialId); Rebuild(); }
+
+        private static string Advance(string[] rack, string current)
+        {
+            for (int i = 0; i < rack.Length; i++)
+            {
+                if (!string.Equals(rack[i], current, System.StringComparison.Ordinal)) continue;
+                return rack[(i + 1) % rack.Length];
+            }
+
+            return rack[0];
+        }
+
+        /// <summary>The materials as the solvers want them.</summary>
+        public ProjectileMaterials Materials => new ProjectileMaterials
+        {
+            CoreMaterialId = CoreMaterialId,
+            JacketMaterialId = JacketMaterialId,
+            CavityFillMaterialId = CavityFillMaterialId
+        };
+
+        /// <summary>Writes the finished projectile into a design.</summary>
+        public void ApplyTo(ref CartridgeDesign design)
+        {
+            design.Projectile = Geometry;
+            design.Materials = Materials;
+        }
+
+        /// <summary>Sets the bench up from an existing load.</summary>
+        public void ReadFrom(in CartridgeDesign design)
+        {
+            Geometry = design.Projectile;
+            CoreMaterialId = design.Materials.CoreMaterialId;
+            JacketMaterialId = design.Materials.JacketMaterialId;
+            CavityFillMaterialId = design.Materials.CavityFillMaterialId;
+            Rebuild();
+        }
+
+        /// <summary>
+        /// Rough colour of the stock in the chuck, so the bullet on the bench LOOKS like
+        /// what it is made of. Presentation only — the physics never reads a colour.
+        /// Falls back to shading by density, which keeps exotic and player-registered
+        /// materials looking sensible without needing an entry here.
+        /// </summary>
+        public Color StockTint
+        {
+            get
+            {
+                string id = Geometry.JacketThickness > 0.0 ? JacketMaterialId : CoreMaterialId;
+
+                switch (id)
+                {
+                    case MaterialLibrary.Lead:
+                    case MaterialLibrary.HardenedLead: return new Color(0.62f, 0.63f, 0.66f);
+                    case MaterialLibrary.Copper: return new Color(0.78f, 0.45f, 0.25f);
+                    case MaterialLibrary.GildingMetal: return new Color(0.78f, 0.62f, 0.34f);
+                    case MaterialLibrary.CartridgeBrass: return new Color(0.82f, 0.70f, 0.35f);
+                    case MaterialLibrary.MildSteel: return new Color(0.55f, 0.57f, 0.60f);
+                    case MaterialLibrary.HardenedSteel: return new Color(0.42f, 0.45f, 0.50f);
+                    case MaterialLibrary.TungstenCarbide: return new Color(0.28f, 0.30f, 0.34f);
+                    case MaterialLibrary.TungstenHeavyAlloy: return new Color(0.35f, 0.36f, 0.38f);
+                    case MaterialLibrary.Aluminium: return new Color(0.80f, 0.82f, 0.85f);
+                    case MaterialLibrary.Bismuth: return new Color(0.68f, 0.62f, 0.72f);
+                    case MaterialLibrary.SinteredIron: return new Color(0.48f, 0.44f, 0.42f);
+                    case MaterialLibrary.Polymer: return new Color(0.25f, 0.26f, 0.28f);
+                    case MaterialLibrary.Zinc: return new Color(0.72f, 0.74f, 0.76f);
+                }
+
+                // Unknown or exotic: darker the denser it is, so a blessed core reads as
+                // something heavy without anyone hand-picking a swatch for it.
+                double density = MaterialLibrary.TryGet(id, out var material) ? material.Density : 8000.0;
+                float heaviness = Mathf.Clamp01((float)(density / 20000.0));
+                return Color.Lerp(new Color(0.85f, 0.86f, 0.88f), new Color(0.20f, 0.20f, 0.24f), heaviness);
+            }
+        }
 
         private const float MovedEpsilon = 1e-8f;
 
@@ -143,7 +294,7 @@ namespace Gunsmith.Crafting
 
             bool changed = false;
 
-            for (int i = 0; i < Handles.Length && i < 8; i++)
+            for (int i = 0; i < Handles.Length && i < OperationCount; i++)
             {
                 var handle = Handles[i];
                 if (handle == null) continue;
@@ -181,6 +332,11 @@ namespace Gunsmith.Crafting
             {
                 var material = IsValid ? ValidMaterial : InvalidMaterial;
                 if (material != null) BulletRenderer.sharedMaterial = material;
+
+                // The work takes the colour of the stock in the chuck, so a steel core
+                // and a lead one are not the same object with different numbers behind
+                // them. Only while the shape is makeable — an impossible cut stays red.
+                if (IsValid && ValidMaterial != null) ValidMaterial.color = StockTint;
             }
 
             if (IsValid) RebuildMesh();
@@ -213,11 +369,7 @@ namespace Gunsmith.Crafting
         {
             if (!IsValid) { Mass = 0.0; if (ScaleReadout != null) ScaleReadout.text = "--"; return; }
 
-            var properties = MassPropertiesSolver.Compute(Geometry, new ProjectileMaterials
-            {
-                CoreMaterialId = CoreMaterialId,
-                JacketMaterialId = JacketMaterialId
-            });
+            var properties = MassPropertiesSolver.Compute(Geometry, Materials);
 
             Mass = properties.Mass;
 
@@ -248,6 +400,7 @@ namespace Gunsmith.Crafting
                 case LatheOperation.CavityMouth: return Vector3.left;
                 case LatheOperation.OgiveShape: return Vector3.up;
                 case LatheOperation.BoattailAngle: return Vector3.right;
+                case LatheOperation.JacketThickness: return Vector3.down;
             }
 
             return Vector3.right;
@@ -289,6 +442,12 @@ namespace Gunsmith.Crafting
 
                 case LatheOperation.BoattailAngle:
                     return new Vector3((float)(Geometry.BaseDiameter * 0.5), 0f, -(float)total);
+
+                case LatheOperation.JacketThickness:
+                    // Rides on the bearing surface, offset just inside the outer wall by
+                    // the jacket's thickness, so pulling it in thickens the wall.
+                    return new Vector3(
+                        0f, -(float)(radius - Geometry.JacketThickness), -(float)(shank - Geometry.BearingSurfaceLength * 0.5));
             }
 
             return Vector3.zero;
@@ -298,7 +457,7 @@ namespace Gunsmith.Crafting
         {
             if (Handles == null) return;
 
-            for (int i = 0; i < Handles.Length && i < 8; i++)
+            for (int i = 0; i < Handles.Length && i < OperationCount; i++)
             {
                 var handle = Handles[i];
                 if (handle == null) continue;
@@ -391,6 +550,13 @@ namespace Gunsmith.Crafting
                     Geometry.BoattailAngle = Clamp(angle, 0.0, MaxBoattailAngle);
                     break;
                 }
+
+                case LatheOperation.JacketThickness:
+                    // The handle rides at (radius - thickness) below the axis, so the
+                    // distance it has been pulled IN from the wall is the wall itself.
+                    // A jacket cannot be thicker than the bullet's own radius.
+                    Geometry.JacketThickness = Clamp(radius - along, 0.0, radius * 0.9);
+                    break;
             }
         }
 
