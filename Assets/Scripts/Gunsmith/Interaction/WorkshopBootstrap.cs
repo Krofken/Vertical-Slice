@@ -92,6 +92,23 @@ namespace Gunsmith.Interaction
             var rig = body.AddComponent<PlayerRig>();
             rig.Head = head;
 
+            // What the player is looking at, and the prompt for using it. Lives on the
+            // head so the ray leaves from the eyes.
+            var prompt = new GameObject("Prompt");
+            prompt.transform.SetParent(head, false);
+            prompt.transform.localPosition = new Vector3(0f, -0.16f, 0.9f);
+            prompt.hideFlags = HideFlags.DontSave;
+
+            var text = prompt.AddComponent<TextMesh>();
+            text.characterSize = 0.028f;
+            text.fontSize = 72;
+            text.color = new Color(0.97f, 0.95f, 0.88f);
+            text.anchor = TextAnchor.MiddleCenter;
+            text.alignment = TextAlignment.Center;
+
+            var interactor = head.gameObject.AddComponent<PlayerInteractor>();
+            interactor.Prompt = text;
+
             return rig;
         }
 

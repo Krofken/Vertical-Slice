@@ -51,7 +51,7 @@ namespace Gunsmith.Interaction
 
             shop.Status = Label(root.transform, "Status", new Vector3(2.45f, 1.05f, 0f), 0.024f);
 
-            BuildControls(root.transform, shop);
+            BuildStationControls(root.transform, shop);
 
             return shop;
         }
@@ -353,47 +353,61 @@ namespace Gunsmith.Interaction
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// The few actions that are still buttons.
+        /// Puts every action where it belongs: on the object that performs it.
         ///
-        /// Taking a job and sleeping are fine as prompts. Pressing a cartridge, firing
-        /// and handing a batch over are NOT — they belong on the press handle, at the
-        /// range and at the counter, and they are still here only because those station
-        /// interactions do not exist yet.
+        /// There is no control panel. You pull the handle AT the press, you fire AT the
+        /// range because you have to walk out there, you hand a batch over AT the
+        /// counter, and you read the board by standing in front of it. That the shop is
+        /// a room you cross is not decoration — it is why the evidence rack works and
+        /// why a test costs you something.
         /// </summary>
-        private static void BuildControls(Transform parent, WorkshopController shop)
+        private static void BuildStationControls(Transform parent, WorkshopController shop)
         {
-            var controls = new GameObject("Controls");
-            controls.transform.SetParent(parent, false);
-            controls.transform.localPosition = new Vector3(0f, 0.55f, 1.26f);
-            Disposable(controls);
+            // The press handle: a lever standing off the end of the bench.
+            var lever = Fixture(parent, "Press handle", new Vector3(1.35f, 1.35f, 0.55f),
+                new Vector3(0.09f, 0.52f, 0.09f), new Color(0.72f, 0.32f, 0.22f));
+            Use(lever, "pull the press handle", 2.2f, shop.PullHandle);
 
-            Button(controls.transform, "Take job", -1.24f, new Color(0.55f, 0.72f, 0.90f), shop.TakeJob);
-            Button(controls.transform, "Press", -0.62f, new Color(0.90f, 0.78f, 0.35f), shop.PullHandle);
-            Button(controls.transform, "Fire", 0f, new Color(0.90f, 0.45f, 0.35f), shop.FireOne);
-            Button(controls.transform, "Hand over", 0.62f, new Color(0.60f, 0.85f, 0.60f), shop.DeliverBatch);
-            Button(controls.transform, "Sleep", 1.24f, new Color(0.60f, 0.58f, 0.75f), shop.Advance);
+            // The counter by the door, where a customer takes their box away.
+            var counter = Fixture(parent, "Counter", new Vector3(-2.2f, 0.5f, 0.2f),
+                new Vector3(1.5f, 1.0f, 0.7f), new Color(0.34f, 0.26f, 0.19f));
+            Use(counter, "hand the batch over", 2.4f, shop.DeliverBatch);
+
+            // The board itself is what you take a job from.
+            var boardFace = Fixture(parent, "Board face", new Vector3(-2.9f, 1.7f, 1.18f),
+                new Vector3(1.5f, 1.2f, 0.06f), new Color(0.42f, 0.33f, 0.24f));
+            Use(boardFace, "take the next job", 2.6f, shop.TakeJob);
+
+            // The firing point, out at the yard end by the rack.
+            var bench = Fixture(parent, "Firing point", new Vector3(3.4f, 0.55f, -0.4f),
+                new Vector3(1.1f, 1.1f, 0.6f), new Color(0.30f, 0.30f, 0.32f));
+            Use(bench, "fire one into the block", 2.4f, shop.FireOne);
+
+            // The cot in the corner. Sleeping is what resolves the night.
+            var cot = Fixture(parent, "Cot", new Vector3(-4.3f, 0.28f, -0.6f),
+                new Vector3(0.9f, 0.55f, 2.0f), new Color(0.38f, 0.34f, 0.42f));
+            Use(cot, "turn in for the night", 2.6f, shop.Advance);
         }
 
-        private static void Button(
-            Transform parent, string label, float x, Color colour, System.Action action)
+        private static GameObject Fixture(
+            Transform parent, string name, Vector3 position, Vector3 size, Color colour)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = label;
+            go.name = name;
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(x, 0f, 0f);
-            go.transform.localScale = new Vector3(0.56f, 0.16f, 0.08f);
+            go.transform.localPosition = position;
+            go.transform.localScale = size;
             go.GetComponent<MeshRenderer>().sharedMaterial = Flat(colour);
             Disposable(go);
+            return go;
+        }
 
-            var click = go.AddComponent<ClickTarget>();
-            click.Clicked = action;
-
-            var text = Label(go.transform, "Label", new Vector3(0f, 0f, -0.7f), 0.014f);
-            text.transform.localScale = new Vector3(1f / 0.56f, 1f / 0.16f, 1f);
-            text.text = label;
-            text.anchor = TextAnchor.MiddleCenter;
-            text.color = new Color(0.10f, 0.09f, 0.08f);
-            click.Label = text;
+        private static void Use(GameObject go, string prompt, float reach, System.Action action)
+        {
+            var interactable = go.AddComponent<Interactable>();
+            interactable.Prompt = prompt;
+            interactable.Reach = reach;
+            interactable.Used = action;
         }
 
         private static TextMesh Label(Transform parent, string name, Vector3 position, float size)
