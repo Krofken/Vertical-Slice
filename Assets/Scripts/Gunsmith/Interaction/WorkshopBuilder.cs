@@ -1,0 +1,441 @@
+using Gunsmith.Crafting;
+using Gunsmith.GameLoop;
+using Gunsmith.Orders;
+using Gunsmith.Range;
+using Krofken.Ballistics;
+using UnityEngine;
+
+namespace Gunsmith.Interaction
+{
+    /// <summary>
+    /// Builds the shop AT RUNTIME.
+    ///
+    /// This used to live in an editor-only tool, which is why the workshop did not exist
+    /// when you pressed Play. Construction belongs here, in the runtime assembly, so the
+    /// same code makes the shop in the editor, in Play mode and in a build.
+    ///
+    /// The stations do not share a natural scale and cannot be made to — a 13 mm bullet
+    /// needs exaggerating about forty times before it is worth looking at, while a gel
+    /// block is already seventy centimetres. Each group therefore gets its own factor,
+    /// chosen for how big it should READ. Only display rigs are scaled; nothing a solver
+    /// touches is affected.
+    /// </summary>
+    public static class WorkshopBuilder
+    {
+        private const float BenchScale = 0.45f;
+        private const float RackScale = 0.90f;
+        private const float BoardScale = 0.85f;
+        private const float BulletDisplayScale = 40f;
+
+        /// <summary>Builds the whole shop under a parent and returns its controller.</summary>
+        public static WorkshopController Build(Transform parent)
+        {
+            var root = new GameObject("Shop");
+            root.transform.SetParent(parent, false);
+            Disposable(root);
+
+            var game = root.AddComponent<GunsmithGameBehaviour>();
+            var shop = root.AddComponent<WorkshopController>();
+            shop.GameBehaviour = game;
+
+            BuildFloor(root.transform);
+
+            shop.Board = BuildBoard(root.transform);
+            shop.Press = BuildBench(root.transform);
+            shop.Rack = BuildRack(root.transform);
+            shop.Reports = BuildReports(root.transform);
+
+            var yard = root.AddComponent<RangeStation>();
+            yard.Rack = shop.Rack;
+            shop.Yard = yard;
+
+            shop.Status = Label(root.transform, "Status", new Vector3(2.45f, 1.05f, 0f), 0.024f);
+
+            BuildControls(root.transform, shop);
+
+            return shop;
+        }
+
+        // ------------------------------------------------------------------
+
+        /// <summary>Something to stand on. Without it the character controller falls
+        /// forever the moment the game starts.</summary>
+        private static void BuildFloor(Transform parent)
+        {
+            var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            floor.name = "Floor";
+            floor.transform.SetParent(parent, false);
+            floor.transform.localPosition = new Vector3(0f, -0.1f, 0f);
+            floor.transform.localScale = new Vector3(16f, 0.2f, 12f);
+            floor.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.28f, 0.26f, 0.24f));
+            Disposable(floor);
+
+            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.name = "Back wall";
+            wall.transform.SetParent(parent, false);
+            wall.transform.localPosition = new Vector3(0f, 1.6f, 1.4f);
+            wall.transform.localScale = new Vector3(16f, 3.4f, 0.2f);
+            wall.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.34f, 0.31f, 0.28f));
+            Disposable(wall);
+        }
+
+        private static OrderBoardView BuildBoard(Transform parent)
+        {
+            var go = new GameObject("Order board");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(-2.9f, 1.7f, 1.28f);
+            go.transform.localScale = Vector3.one * BoardScale;
+            Disposable(go);
+
+            var board = go.AddComponent<OrderBoardView>();
+            board.CardMaterial = Flat(new Color(0.90f, 0.87f, 0.78f));
+            board.AcceptedCardMaterial = Flat(new Color(0.74f, 0.80f, 0.70f));
+            return board;
+        }
+
+        private static DeliveryReportView BuildReports(Transform parent)
+        {
+            var go = new GameObject("Delivery notes");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(-2.9f, 0.75f, 1.28f);
+            go.transform.localScale = Vector3.one * BoardScale;
+            Disposable(go);
+
+            var reports = go.AddComponent<DeliveryReportView>();
+            reports.NoteMaterial = Flat(new Color(0.92f, 0.90f, 0.82f));
+            reports.DisasterNoteMaterial = Flat(new Color(0.88f, 0.72f, 0.68f));
+            return reports;
+        }
+
+        private static EvidenceRack BuildRack(Transform parent)
+        {
+            var go = new GameObject("Evidence rack");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(2.6f, 1.0f, 1.1f);
+            go.transform.localRotation = Quaternion.Euler(0f, -18f, 0f);
+            go.transform.localScale = Vector3.one * RackScale;
+            Disposable(go);
+
+            var rack = go.AddComponent<EvidenceRack>();
+            rack.BlockMaterial = Translucent(new Color(0.70f, 0.78f, 0.72f, 0.16f));
+            rack.CavityMaterial = Flat(new Color(0.85f, 0.25f, 0.20f));
+            rack.BandMaterial = Flat(new Color(0.10f, 0.10f, 0.12f));
+            rack.CardMaterial = Flat(new Color(0.92f, 0.90f, 0.84f));
+            rack.ProjectileMaterial = Flat(new Color(0.75f, 0.58f, 0.30f));
+            rack.BrassMaterial = Flat(new Color(0.80f, 0.66f, 0.30f));
+            rack.PrimerMaterial = Flat(new Color(0.66f, 0.64f, 0.60f));
+            rack.MarkMaterial = Flat(new Color(0.20f, 0.18f, 0.16f));
+            return rack;
+        }
+
+        // ------------------------------------------------------------------
+        // The bench: four tools feeding one press
+        // ------------------------------------------------------------------
+
+        private static LoadingPress BuildBench(Transform parent)
+        {
+            var bench = new GameObject("Bench");
+            bench.transform.SetParent(parent, false);
+            bench.transform.localPosition = new Vector3(0f, 1.15f, 0.9f);
+            bench.transform.localScale = Vector3.one * BenchScale;
+            Disposable(bench);
+
+            var top = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            top.name = "Bench top";
+            top.transform.SetParent(bench.transform, false);
+            top.transform.localPosition = new Vector3(0f, -0.55f, 0f);
+            top.transform.localScale = new Vector3(7f, 0.12f, 1.6f);
+            top.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.36f, 0.27f, 0.19f));
+            Disposable(top);
+
+            var station = BuildLathe(bench.transform);
+            var mill = BuildMill(bench.transform);
+            var balance = BuildBalance(bench.transform);
+            var die = BuildDie(bench.transform, station);
+
+            var press = bench.AddComponent<LoadingPress>();
+            press.CoreBench = station;
+            press.Mill = mill;
+            press.Balance = balance;
+            press.Die = die;
+            press.BatchSize = 20;
+            return press;
+        }
+
+        private static LatheStation BuildLathe(Transform parent)
+        {
+            var go = new GameObject("Core bench");
+            go.transform.SetParent(parent, false);
+            Disposable(go);
+
+            var station = go.AddComponent<LatheStation>();
+            station.Geometry = ProjectileGeometry.Default9mmFmj;
+            station.ValidMaterial = Flat(new Color(0.76f, 0.60f, 0.32f));
+            station.InvalidMaterial = Flat(new Color(0.85f, 0.25f, 0.20f));
+
+            var rig = new GameObject("Rig").transform;
+            rig.SetParent(go.transform, false);
+            rig.localScale = Vector3.one * BulletDisplayScale;
+            rig.localRotation = Quaternion.Euler(0f, -90f, 0f);
+            station.Rig = rig;
+            Disposable(rig.gameObject);
+
+            var bullet = new GameObject("Projectile");
+            bullet.transform.SetParent(rig, false);
+            station.BulletMesh = bullet.AddComponent<MeshFilter>();
+            station.BulletRenderer = bullet.AddComponent<MeshRenderer>();
+            Disposable(bullet);
+
+            station.Handles = new Transform[LatheStation.OperationCount];
+            AddHandle(station, rig, LatheOperation.MeplatDiameter, "Meplat", new Color(0.95f, 0.80f, 0.25f));
+            AddHandle(station, rig, LatheOperation.CavityMouth, "Cavity mouth", new Color(0.95f, 0.45f, 0.25f));
+            AddHandle(station, rig, LatheOperation.CavityDepth, "Cavity depth", new Color(0.90f, 0.35f, 0.45f));
+            AddHandle(station, rig, LatheOperation.NoseLength, "Nose length", new Color(0.35f, 0.75f, 0.95f));
+            AddHandle(station, rig, LatheOperation.OgiveShape, "Ogive shape", new Color(0.45f, 0.90f, 0.60f));
+            AddHandle(station, rig, LatheOperation.BearingSurface, "Bearing surface", new Color(0.60f, 0.60f, 0.95f));
+            AddHandle(station, rig, LatheOperation.BoattailLength, "Boattail length", new Color(0.80f, 0.55f, 0.95f));
+            AddHandle(station, rig, LatheOperation.BoattailAngle, "Boattail angle", new Color(0.95f, 0.95f, 0.95f));
+            AddHandle(station, rig, LatheOperation.JacketThickness, "Jacket", new Color(0.95f, 0.55f, 0.75f));
+
+            station.ScaleReadout = Label(go.transform, "Scale",
+                new Vector3(0f, -0.34f, 0f), 0.012f);
+            station.Complaint = Label(go.transform, "Complaint",
+                new Vector3(0f, -0.46f, 0f), 0.007f);
+            station.Complaint.color = new Color(0.95f, 0.35f, 0.30f);
+
+            station.Rebuild();
+            return station;
+        }
+
+        private static void AddHandle(
+            LatheStation station, Transform rig, LatheOperation operation, string label, Color colour)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = label;
+            go.transform.SetParent(rig, false);
+            go.transform.localScale = Vector3.one * 0.0014f;
+            go.GetComponent<MeshRenderer>().sharedMaterial = Flat(colour);
+            Disposable(go);
+
+            var handle = go.AddComponent<LatheHandle>();
+            handle.Operation = operation;
+            handle.Station = station;
+
+            station.Handles[(int)operation] = go.transform;
+        }
+
+        private static PropellantMill BuildMill(Transform parent)
+        {
+            var go = new GameObject("Propellant mill");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(-2.1f, -0.15f, 0f);
+            Disposable(go);
+
+            var mill = go.AddComponent<PropellantMill>();
+            mill.GrainMaterial = Flat(new Color(0.24f, 0.22f, 0.20f));
+
+            var tray = new GameObject("Grain tray").transform;
+            tray.SetParent(go.transform, false);
+            tray.localScale = Vector3.one * 900f;
+            mill.GrainTray = tray;
+            Disposable(tray.gameObject);
+
+            var pan = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            pan.name = "Pan";
+            pan.transform.SetParent(go.transform, false);
+            pan.transform.localPosition = new Vector3(0f, -0.012f, 0f);
+            pan.transform.localScale = new Vector3(0.30f, 0.008f, 0.30f);
+            pan.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.50f, 0.52f, 0.56f));
+            Disposable(pan);
+
+            mill.Readout = Label(go.transform, "Mill readout", new Vector3(0f, -0.14f, 0f), 0.008f);
+
+            mill.SetShape(GrainShape.Sphere);
+            mill.SetWeb(3.5e-5);
+            mill.SetDeterrent(0.3);
+            return mill;
+        }
+
+        private static PowderBalance BuildBalance(Transform parent)
+        {
+            var go = new GameObject("Powder balance");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(-1.1f, 0.25f, 0f);
+            Disposable(go);
+
+            var balance = go.AddComponent<PowderBalance>();
+            balance.BeamTravel = 0.30;
+            balance.MaxSettingGrains = 12.0;
+
+            var beam = new GameObject("Beam").transform;
+            beam.SetParent(go.transform, false);
+            balance.Beam = beam;
+            Disposable(beam.gameObject);
+
+            var bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            bar.name = "Bar";
+            bar.transform.SetParent(beam, false);
+            bar.transform.localPosition = new Vector3(0.10f, 0f, 0f);
+            bar.transform.localScale = new Vector3(0.44f, 0.012f, 0.012f);
+            bar.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.62f, 0.64f, 0.68f));
+            Disposable(bar);
+
+            var poise = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            poise.name = "Poise";
+            poise.transform.SetParent(beam, false);
+            poise.transform.localScale = new Vector3(0.022f, 0.05f, 0.05f);
+            poise.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.90f, 0.75f, 0.30f));
+            balance.Poise = poise.transform;
+            Disposable(poise);
+
+            var pan = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            pan.name = "Pan";
+            pan.transform.SetParent(beam, false);
+            pan.transform.localPosition = new Vector3(-0.13f, -0.05f, 0f);
+            pan.transform.localScale = new Vector3(0.10f, 0.012f, 0.10f);
+            pan.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.55f, 0.58f, 0.62f));
+            balance.Pan = pan.transform;
+            Disposable(pan);
+
+            balance.BeamReadout = Label(go.transform, "Beam readout", new Vector3(0.10f, -0.16f, 0f), 0.010f);
+
+            balance.SettingGrains = 5.5;
+            balance.Trickle(5.5);
+            return balance;
+        }
+
+        private static SeatingStop BuildDie(Transform parent, LatheStation station)
+        {
+            var go = new GameObject("Seating die");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(1.6f, 0f, 0f);
+            Disposable(go);
+
+            var die = go.AddComponent<SeatingStop>();
+            die.Projectile = station.Geometry;
+
+            var rig = new GameObject("Rig").transform;
+            rig.SetParent(go.transform, false);
+            rig.localScale = Vector3.one * BulletDisplayScale;
+            rig.localRotation = Quaternion.Euler(0f, -90f, 0f);
+            Disposable(rig.gameObject);
+
+            var casing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            casing.name = "Case";
+            casing.transform.SetParent(rig, false);
+            casing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            casing.transform.localPosition = new Vector3(0f, 0f, -(float)(die.CaseLength * 0.5));
+            casing.transform.localScale = new Vector3(0.0095f, (float)(die.CaseLength * 0.5), 0.0095f);
+            casing.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.72f, 0.60f, 0.25f));
+            Disposable(casing);
+
+            var bullet = new GameObject("Bullet");
+            bullet.transform.SetParent(rig, false);
+            bullet.AddComponent<MeshFilter>().sharedMesh =
+                Krofken.Ballistics.UnityIntegration.ProjectileMeshBuilder.Create(die.Projectile, 24, 24, 0.0);
+            bullet.AddComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.78f, 0.62f, 0.34f));
+            die.SeatedBullet = bullet.transform;
+            Disposable(bullet);
+
+            var stop = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            stop.name = "Stop";
+            stop.transform.SetParent(rig, false);
+            stop.transform.localScale = new Vector3(0.011f, 0.011f, 0.0012f);
+            stop.GetComponent<MeshRenderer>().sharedMaterial = Flat(new Color(0.85f, 0.35f, 0.35f));
+            die.Stop = stop.transform;
+            Disposable(stop);
+
+            die.DepthReadout = Label(go.transform, "Die readout", new Vector3(0f, -0.16f, 0f), 0.008f);
+            die.Depth = 0.0030;
+            return die;
+        }
+
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// The few actions that are still buttons.
+        ///
+        /// Taking a job and sleeping are fine as prompts. Pressing a cartridge, firing
+        /// and handing a batch over are NOT — they belong on the press handle, at the
+        /// range and at the counter, and they are still here only because those station
+        /// interactions do not exist yet.
+        /// </summary>
+        private static void BuildControls(Transform parent, WorkshopController shop)
+        {
+            var controls = new GameObject("Controls");
+            controls.transform.SetParent(parent, false);
+            controls.transform.localPosition = new Vector3(0f, 0.55f, 1.26f);
+            Disposable(controls);
+
+            Button(controls.transform, "Take job", -1.24f, new Color(0.55f, 0.72f, 0.90f), shop.TakeJob);
+            Button(controls.transform, "Press", -0.62f, new Color(0.90f, 0.78f, 0.35f), shop.PullHandle);
+            Button(controls.transform, "Fire", 0f, new Color(0.90f, 0.45f, 0.35f), shop.FireOne);
+            Button(controls.transform, "Hand over", 0.62f, new Color(0.60f, 0.85f, 0.60f), shop.DeliverBatch);
+            Button(controls.transform, "Sleep", 1.24f, new Color(0.60f, 0.58f, 0.75f), shop.Advance);
+        }
+
+        private static void Button(
+            Transform parent, string label, float x, Color colour, System.Action action)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = label;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(x, 0f, 0f);
+            go.transform.localScale = new Vector3(0.56f, 0.16f, 0.08f);
+            go.GetComponent<MeshRenderer>().sharedMaterial = Flat(colour);
+            Disposable(go);
+
+            var click = go.AddComponent<ClickTarget>();
+            click.Clicked = action;
+
+            var text = Label(go.transform, "Label", new Vector3(0f, 0f, -0.7f), 0.014f);
+            text.transform.localScale = new Vector3(1f / 0.56f, 1f / 0.16f, 1f);
+            text.text = label;
+            text.anchor = TextAnchor.MiddleCenter;
+            text.color = new Color(0.10f, 0.09f, 0.08f);
+            click.Label = text;
+        }
+
+        private static TextMesh Label(Transform parent, string name, Vector3 position, float size)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = position;
+            Disposable(go);
+
+            var text = go.AddComponent<TextMesh>();
+            text.characterSize = size;
+            text.fontSize = 72;
+            text.color = new Color(0.95f, 0.93f, 0.88f);
+            text.anchor = TextAnchor.UpperCenter;
+            text.alignment = TextAlignment.Center;
+            return text;
+        }
+
+        /// <summary>Nothing this builds is ever serialised, so an editor-time build can
+        /// still never leak into the scene file or raise a save prompt.</summary>
+        private static void Disposable(GameObject go) => go.hideFlags = HideFlags.DontSave;
+
+        private static Material Flat(Color colour)
+        {
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            var material = new Material(shader) { hideFlags = HideFlags.DontSave };
+            material.color = colour;
+            return material;
+        }
+
+        private static Material Translucent(Color colour)
+        {
+            var material = Flat(colour);
+            material.SetFloat("_Surface", 1f);
+            material.SetFloat("_Blend", 0f);
+            material.SetFloat("_ZWrite", 0f);
+            material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            material.color = colour;
+            return material;
+        }
+    }
+}

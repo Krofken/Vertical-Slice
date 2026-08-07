@@ -53,17 +53,7 @@ namespace Gunsmith.Interaction
         /// </summary>
         public void Build()
         {
-            // The station construction still lives in the editor-only WorkshopSetup, so
-            // for now the bootstrap adopts a shop that is already present rather than
-            // building one. Moving that construction into a runtime WorkshopBuilder is
-            // the next step, and is what will make the shop exist in a real build.
-            if (Shop == null) Shop = FindAnyObjectByType<WorkshopController>();
-
-            if (Shop == null)
-                Debug.LogWarning("[Bootstrap] No workshop in the scene yet. " +
-                                 "Gunsmith -> Open Workshop builds one; it does not survive Play " +
-                                 "until its construction moves into a runtime builder.");
-
+            if (Shop == null) Shop = WorkshopBuilder.Build(transform);
             if (SpawnPlayer && Player == null) Player = BuildPlayer();
         }
 
