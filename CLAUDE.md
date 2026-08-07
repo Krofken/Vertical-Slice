@@ -161,6 +161,23 @@ overreach a cost beyond "it didn't work."
 
 ---
 
+## The bench is four stations
+
+Agreed 2026-08-07, after the tools existed but the *stations* had never been written
+down — which is how the bench ended up covering three of the ten things the sim reads
+while the rest sat hardcoded and invisible. The player works four stations:
+
+| Station | What it sets | State |
+|---|---|---|
+| **Propellant mill** | base chemistry, grain shape, web thickness, deterrent coating | **built** |
+| **Core bench (lathe)** | projectile geometry, and the materials it is made of | shape **built**, materials missing |
+| **Press** | assembles case + primer + charge + bullet into rounds | `AmmunitionWorkshop.Craft` exists, no tool |
+| **Case and primer** | case geometry, primer chemistry | **deferred — see below** |
+
+The powder balance and the seating stop are **parts of the press**, not stations of
+their own: you weigh a charge, pour it, then seat the bullet against the stop. They were
+built standalone and should be folded in when the press is.
+
 ## Crafting: operate tools, don't fill in a form
 
 Sliders in a panel feel like tax software. Freehand-drawing the case was considered and
@@ -212,6 +229,18 @@ range with instruments; next-morning delivery with written feedback.
 **Out, deliberately:** gun design (the customer brings the gun and a calibre, the player
 perfects the round), multiple calibres (9 mm only), day-count and economy depth, NPC
 models beyond primitives.
+
+**Case and primer design — out of the slice, required in the full game.** Confirmed
+2026-08-07. The player designing the case and mixing the primer is a **must** for the
+finished game, not a maybe. It is out of the vertical slice for one concrete reason: it
+is the only station on the list that needs NEW PHYSICS rather than a tool over physics
+that already exists — primer brisance has to feed the ignition model, and case geometry
+has to become a designed shape rather than a library row. Everything else the bench
+still lacks is already fully modelled and merely unreachable.
+
+Until then the case stays a `CartridgeCaseLibrary` pick (9 mm only, and that stands) and
+the primer stays a counted consumable in `WorkshopInventory` with no design surface.
+**Do not quietly design around this as though it were cut.** It is deferred.
 
 **The scene is the user's to build by hand.** No scene, no UI, no prefabs. Test scenes
 are fine; the vertical slice scene is not to be authored by an agent.

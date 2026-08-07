@@ -90,6 +90,7 @@ namespace Gunsmith.EditorTools
             // viewer because they are not under the rig.
             rig.localRotation = Quaternion.Euler(0f, -90f, 0f);
 
+            BuildPropellantMill(root.transform);
             BuildBalance(root.transform, station);
             BuildSeatingDie(root.transform, station);
 
@@ -146,6 +147,44 @@ namespace Gunsmith.EditorTools
             text.alignment = TextAlignment.Center;
 
             return text;
+        }
+
+        /// <summary>
+        /// The propellant mill, bottom left. Shows a magnified sample of the grains it
+        /// presses, because grain form and grain size ARE the readout — a coarse powder
+        /// has to visibly be coarse.
+        /// </summary>
+        private static void BuildPropellantMill(Transform parent)
+        {
+            var root = new GameObject("Propellant Mill");
+            root.transform.SetParent(parent, false);
+            root.transform.localPosition = new Vector3(-1.20f, -0.42f, 0f);
+
+            var mill = root.AddComponent<PropellantMill>();
+            mill.GrainMaterial = Solid(new Color(0.24f, 0.22f, 0.20f));
+
+            // Propellant grains run from 25 to 500 micrometres. Even at the bench's 40x
+            // they would be specks, so the tray is a magnifying glass over the pan
+            // rather than part of the same scale as the bullet.
+            var tray = new GameObject("Grain Tray").transform;
+            tray.SetParent(root.transform, false);
+            tray.localScale = Vector3.one * 900f;
+            mill.GrainTray = tray;
+
+            var pan = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            pan.name = "Pan";
+            pan.transform.SetParent(root.transform, false);
+            pan.transform.localPosition = new Vector3(0f, -0.012f, 0f);
+            pan.transform.localScale = new Vector3(0.30f, 0.008f, 0.30f);
+            pan.GetComponent<MeshRenderer>().sharedMaterial = Solid(new Color(0.50f, 0.52f, 0.56f));
+
+            mill.Readout = AddLabel(root.transform, "Mill readout",
+                new Vector3(0f, -0.10f, 0f), 0.008f, new Color(0.95f, 0.92f, 0.80f), TextAnchor.UpperCenter);
+
+            // The calibrated baseline powder, so the bench opens on a working load.
+            mill.SetShape(GrainShape.Sphere);
+            mill.SetWeb(3.5e-5);
+            mill.SetDeterrent(0.3);
         }
 
         /// <summary>
