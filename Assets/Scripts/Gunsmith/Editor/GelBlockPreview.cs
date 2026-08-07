@@ -32,7 +32,6 @@ namespace Gunsmith.EditorTools
             Clear();
 
             var root = new GameObject(RootName);
-            Undo.RegisterCreatedObjectUndo(root, "Spawn Gel Block Preview");
 
             var gel = TargetMediumLibrary.Get(TargetMediumLibrary.Gelatin);
             var bare = TargetMediumLibrary.BareGelatinBlock();
@@ -44,6 +43,11 @@ namespace Gunsmith.EditorTools
             Add(root, ref index, "Frangible", Frangible(), bare, gel);
             Add(root, ref index, "Armour Piercing", ArmourPiercing(), bare, gel);
             Add(root, ref index, "HP through denim", HollowPoint(), clothed, gel);
+
+            // Never serialised, so the scene stays clean and no domain reload stops to
+            // ask whether to save it. See LatheBenchSetup.MakeDisposable.
+            foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+                transform.gameObject.hideFlags = HideFlags.DontSave;
 
             Selection.activeGameObject = root;
             SceneView.FrameLastActiveSceneView();

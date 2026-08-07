@@ -32,7 +32,6 @@ namespace Gunsmith.EditorTools
             Clear();
 
             var root = new GameObject(RootName);
-            Undo.RegisterCreatedObjectUndo(root, "Open Lathe Bench");
 
             var rig = new GameObject("Rig").transform;
             rig.SetParent(root.transform, false);
@@ -96,6 +95,8 @@ namespace Gunsmith.EditorTools
 
             station.Rebuild();
 
+            MakeDisposable(root);
+
             Selection.activeGameObject = root;
             SceneView.FrameLastActiveSceneView();
 
@@ -156,7 +157,8 @@ namespace Gunsmith.EditorTools
         {
             var root = new GameObject("Powder Balance");
             root.transform.SetParent(parent, false);
-            root.transform.localPosition = new Vector3(-0.75f, 0f, 0f);
+            // Far enough left that the beam cannot be mistaken for part of the lathe.
+            root.transform.localPosition = new Vector3(-1.15f, 0.30f, 0f);
 
             var balance = root.AddComponent<PowderBalance>();
             balance.BeamTravel = 0.30;
@@ -207,7 +209,10 @@ namespace Gunsmith.EditorTools
         {
             var root = new GameObject("Seating Die");
             root.transform.SetParent(parent, false);
-            root.transform.localPosition = new Vector3(0.75f, 0f, 0f);
+            // The die builds a whole cartridge, roughly 30 mm at 40x, and its bullet
+            // stands on the side facing the lathe. Set well clear or the two read as a
+            // single object.
+            root.transform.localPosition = new Vector3(1.25f, -0.30f, 0f);
 
             var die = root.AddComponent<SeatingStop>();
             die.Projectile = station.Geometry;
@@ -246,6 +251,26 @@ namespace Gunsmith.EditorTools
                 new Vector3(0f, -0.16f, 0f), 0.008f, new Color(0.95f, 0.92f, 0.80f), TextAnchor.UpperCenter);
 
             die.Depth = 0.0030;
+        }
+
+        /// <summary>
+        /// Marks a whole preview hierarchy as never-saved.
+        ///
+        /// WHY THIS MATTERS MORE THAN IT LOOKS: without it, spawning a preview dirties
+        /// the open scene, and then every domain reload — every script edit, every entry
+        /// into play mode, every test run — stops and asks "save your changes?". That
+        /// modal blocks the editor until a human clicks it, which makes the bench
+        /// unusable while anyone is doing anything else.
+        ///
+        /// HideFlags.DontSave takes the objects out of serialisation entirely, so the
+        /// scene never becomes dirty, nothing prompts, and a preview can never be
+        /// committed by accident. The trade is that they vanish on a domain reload —
+        /// which is correct: they are disposable, and the menu item rebuilds them.
+        /// </summary>
+        private static void MakeDisposable(GameObject root)
+        {
+            foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+                transform.gameObject.hideFlags = HideFlags.DontSave;
         }
 
         private static Material Solid(Color colour)

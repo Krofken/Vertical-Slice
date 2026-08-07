@@ -31,7 +31,6 @@ namespace Gunsmith.EditorTools
             Clear();
 
             var root = new GameObject(RootName);
-            Undo.RegisterCreatedObjectUndo(root, "Spawn Projectile Preview");
 
             int index = 0;
             Add(root, ref index, "FMJ", Fmj(), new Color(0.72f, 0.55f, 0.28f));
@@ -39,6 +38,11 @@ namespace Gunsmith.EditorTools
             Add(root, ref index, "Boattail Rifle", Boattail(), new Color(0.70f, 0.60f, 0.35f));
             Add(root, ref index, "Wadcutter", Wadcutter(), new Color(0.55f, 0.55f, 0.58f));
             Add(root, ref index, "Secant VLD", Vld(), new Color(0.62f, 0.66f, 0.70f));
+
+            // Never serialised, so the scene stays clean and no domain reload stops to
+            // ask whether to save it. See LatheBenchSetup.MakeDisposable.
+            foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+                transform.gameObject.hideFlags = HideFlags.DontSave;
 
             Selection.activeGameObject = root;
             SceneView.FrameLastActiveSceneView();

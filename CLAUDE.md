@@ -421,15 +421,20 @@ five bullets — roughly 2000 lines of throwaway objects saved into it by accide
 have been cleared. It now holds only the camera, directional light and global volume it
 started with.
 
-**Keep it that way.** Preview objects spawn into the open scene and are disposable: run
-`Ballistics → Clear …Preview` and `Gunsmith → Clear Lathe Bench` before saving, and never
-let one reach a commit.
+**Keep it that way, and it now keeps itself.** Every preview spawner tags its whole
+hierarchy `HideFlags.DontSave`, so previews are never serialised, the open scene never
+goes dirty, and one cannot reach a commit by accident. They vanish on a domain reload,
+which is correct — they are disposable and the menu item rebuilds them.
 
-**Running the PlayMode suite saves the open scene for you.** Entering play mode writes
-the scene to disk, so anything spawned into it lands in the file with nobody pressing
-save — this is how ~2900 lines of bench got into `SampleScene`. Clear the previews
-*before* a PlayMode run, not just before a manual save, and check
-`git diff --stat Assets/Scenes` afterwards. The vertical slice scene itself is still the user's to build by
+That flag is load-bearing for a second reason: **a dirty scene makes every domain reload
+stop and ask "save your changes?"**. Script edits, entering play mode and test runs all
+reload the domain, so a preview left in a dirty scene turns into a modal dialog blocking
+the editor until a human clicks it. Do not use `Undo.RegisterCreatedObjectUndo` on
+preview objects — it dirties the scene and brings the prompt back.
+
+Before this, entering play mode for the PlayMode suite silently wrote ~2900 lines of
+bench into `SampleScene` with nobody pressing save. Check `git diff --stat Assets/Scenes`
+if you ever suspect it has come back. The vertical slice scene itself is still the user's to build by
 hand.
 
 **The lathe is open at `Gunsmith → Open Lathe Bench`.** Drag the coloured handles — with
