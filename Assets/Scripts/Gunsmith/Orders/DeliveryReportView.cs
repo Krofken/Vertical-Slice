@@ -82,7 +82,13 @@ namespace Gunsmith.Orders
 
             if (material != null) note.GetComponent<MeshRenderer>().sharedMaterial = material;
 
-            AddText(note.transform, evaluation.Feedback);
+            // The feedback is prose and TextMesh does not wrap, so a note would
+            // otherwise run off the wall in one line. Wrap each line it already has.
+            var wrapped = new System.Text.StringBuilder();
+            foreach (string line in evaluation.Feedback.Replace("\r", "").Split('\n'))
+                wrapped.AppendLine(OrderBoardView.Wrap(line, 34));
+
+            AddText(note.transform, wrapped.ToString());
 
             _notes.Add(note);
         }

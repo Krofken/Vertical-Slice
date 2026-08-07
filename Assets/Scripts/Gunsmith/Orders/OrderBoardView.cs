@@ -113,14 +113,14 @@ namespace Gunsmith.Orders
 
             text.Append(order.CustomerName).Append('\n');
             text.Append(order.CustomerRole).Append("\n\n");
-            text.Append(order.Brief).Append("\n\n");
+            text.Append(Wrap(order.Brief)).Append("\n\n");
 
             for (int i = 0; i < order.Requirements.Count; i++)
             {
                 string words = order.Requirements[i].CustomerWords;
                 if (string.IsNullOrEmpty(words)) continue;
 
-                text.Append("- ").Append(words).Append('\n');
+                text.Append("- ").Append(Wrap(words, 30)).Append('\n');
             }
 
             text.Append('\n');
@@ -130,6 +130,42 @@ namespace Gunsmith.Orders
             if (taken) text.Append("\n\n(taken)");
 
             return text.ToString();
+        }
+
+        /// <summary>
+        /// Breaks prose onto lines a card can hold.
+        ///
+        /// TextMesh does not wrap. A customer's brief is a sentence, so without this one
+        /// card runs off in a single line metres long and the whole board becomes
+        /// unreadable — which is exactly what it did the first time.
+        /// </summary>
+        public static string Wrap(string prose, int columns = 32)
+        {
+            if (string.IsNullOrEmpty(prose)) return string.Empty;
+
+            var wrapped = new System.Text.StringBuilder(prose.Length + 16);
+            int lineLength = 0;
+
+            foreach (string word in prose.Split(' '))
+            {
+                if (word.Length == 0) continue;
+
+                if (lineLength > 0 && lineLength + 1 + word.Length > columns)
+                {
+                    wrapped.Append('\n');
+                    lineLength = 0;
+                }
+                else if (lineLength > 0)
+                {
+                    wrapped.Append(' ');
+                    lineLength++;
+                }
+
+                wrapped.Append(word);
+                lineLength += word.Length;
+            }
+
+            return wrapped.ToString();
         }
 
         private void AddText(Transform parent, string content)
