@@ -257,7 +257,16 @@ namespace Gunsmith.Range
             entry = null;
 
             if (design?.Baked == null) { failure = FireFailure.NoDesign; return false; }
-            if (!design.Baked.IsValid) { failure = FireFailure.DesignUnsafe; return false; }
+
+            // Only refuse rounds that could never have been BUILT. A load that will
+            // burst the case or wreck the gun gets fired, because finding that out is
+            // the entire purpose of the range — refusing here would tell the player the
+            // answer and mean they never see the consequence.
+            //
+            // (The failure code is still called DesignUnsafe; it now means "these parts
+            // do not go together", and renaming it would ripple further than it is
+            // worth right now.)
+            if (!design.Baked.CanAssemble) { failure = FireFailure.DesignUnsafe; return false; }
             if (!_workshop.TryConsumeRounds(design.Id, 1)) { failure = FireFailure.NoAmmunition; return false; }
 
             failure = FireFailure.None;

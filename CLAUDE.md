@@ -90,6 +90,11 @@ Blocks and recovered bullets **do not disappear**. A rack on the wall. Bullet 7 
 next to bullet 4, still mushroomed, and you can see 7 opened wider. Blocks line up so
 the player can walk down them. This converts "I need to remember" into "I can look."
 
+**Built** — `EvidenceRack` and `RangeStation`. Every shot racks a block, in shot order,
+and nothing clears them automatically. `RangeStation.TryFire` is the join between the
+bench and the yard: it spends a round off the shelf, so a test costs ammunition and is a
+real choice against the finite night.
+
 The notebook is therefore **an index to physical evidence**, not a spreadsheet. Shot
 7's page shows the recipe and points at the block on the rack.
 
@@ -180,14 +185,31 @@ their own: you weigh a charge, pour it, then seat the bullet against the stop.
 The press designs nothing itself — it only gathers what the other tools made, adds a
 case and a primer, and pulls the handle.
 
-**OPEN QUESTION — the press currently warns that a load will burst.**
-`AmmunitionWorkshop.Craft` refuses an overpressure design with "This design will not fire
-safely," which is a *prediction about firing* and sits badly against rule 2. A gunsmith
-can see that a charge will not physically fit a case; they cannot see peak pressure.
-The likely fix is to split the two refusals — let assembly-impossible loads be refused
-and let ballistically-dangerous ones be pressed, so the player learns from a ruptured
-case at the range. Not changed yet, because it alters existing core semantics and is a
-design call rather than a bug.
+### The bench refuses what will not go together, never what is dangerous
+
+Decided 2026-08-07 and built. `DesignIssue` carries a `DesignIssueKind`:
+
+- **Assembly** — unknown case, propellant or material; invalid geometry; wrong calibre
+  ("it will not chamber"); a charge that will not physically fit; nonsense inputs.
+  These are facts about objects in the player's hands, and both the bench and the yard
+  refuse them.
+- **Ballistic** — overpressure, squib. These **assemble perfectly well, get loaded, and
+  get fired.** The player finds out by firing them.
+
+`BakedCartridge.CanAssemble` is the question the bench and the range ask.
+`BakedCartridge.IsValid` still means "safe to fire" and is what tests and evaluation use
+— **never gate crafting or firing on it.**
+
+A gunsmith can see that a charge will not fit a case. They cannot see peak pressure.
+Warning them hands over the answer and removes the reason to walk out to the range,
+which is the whole game. A test asserts the bench never leaks the words *pressure,
+unsafe, safely, burst, rupture* or *velocity* about a round nobody has fired — that
+assertion is the guard on the rule.
+
+Still missing: the **physical consequence** of firing one. Peak pressure is supposed to
+read as a flattened primer, an ejector mark, a split neck; a wrecked gun is supposed to
+be a wrecked gun. The round now fires and the notebook records it, but nothing hands the
+player the burst case yet.
 
 ## Crafting: operate tools, don't fill in a form
 
