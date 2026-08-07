@@ -66,7 +66,41 @@ namespace Gunsmith.Interaction
 
         private int _batch;
 
-        private void Awake() => BindFixtures();
+        private void Awake()
+        {
+            AdoptStations();
+            BindFixtures();
+        }
+
+        /// <summary>
+        /// Finds any station whose reference did not survive.
+        ///
+        /// "[Range] no yard." on every attempt to fire was this: <see cref="Yard"/> was
+        /// null, so the shop refused before it got anywhere near the ballistics. The
+        /// wiring is done by the builder at construction time, which is fine for a shop
+        /// built from code and useless for one restored from a prefab or reassembled by
+        /// hand — exactly the situation the authoring pass created.
+        ///
+        /// Same lesson as the fixtures and the bootstrap's Shop field: a component must
+        /// be able to find its own parts rather than trusting whoever built it. Anything
+        /// already assigned is left alone, so a hand-wired override still wins.
+        /// </summary>
+        public void AdoptStations()
+        {
+            if (GameBehaviour == null) GameBehaviour = GetComponentInChildren<GunsmithGameBehaviour>(true);
+            if (Board == null) Board = GetComponentInChildren<OrderBoardView>(true);
+            if (Press == null) Press = GetComponentInChildren<LoadingPress>(true);
+            if (Yard == null) Yard = GetComponentInChildren<RangeStation>(true);
+            if (Rack == null) Rack = GetComponentInChildren<EvidenceRack>(true);
+            if (Reports == null) Reports = GetComponentInChildren<DeliveryReportView>(true);
+
+            // The yard needs the rack to put its evidence on.
+            if (Yard != null && Yard.Rack == null) Yard.Rack = Rack;
+
+            if (Yard == null)
+                Debug.LogWarning("[Shop] No RangeStation anywhere under the shop — " +
+                                 "firing will refuse. Rebuild the workshop.", this);
+        }
 
         private void Start() => Refresh();
 
