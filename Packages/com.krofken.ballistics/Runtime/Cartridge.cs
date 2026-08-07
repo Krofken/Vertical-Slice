@@ -59,16 +59,41 @@ namespace Krofken.Ballistics
         Error = 2
     }
 
+    /// <summary>
+    /// Whether a fault stops the round being BUILT or only makes it dangerous to FIRE.
+    ///
+    /// This distinction is a game rule, not a physics one, and it matters enormously.
+    /// A gunsmith holding the components can see that a bullet will not chamber or that
+    /// a charge will not fit the case — those are facts about objects in their hands, and
+    /// the bench is right to refuse them. They cannot see peak pressure. Telling the
+    /// player their load will burst before they have fired it hands them the answer and
+    /// removes the reason to walk out to the range, which is the whole game.
+    ///
+    /// So ballistic faults are allowed to be loaded. The player finds out from a
+    /// flattened primer, a ruptured case, or a wrecked gun.
+    /// </summary>
+    public enum DesignIssueKind
+    {
+        /// <summary>It cannot be fired safely, but it assembles. Loadable.</summary>
+        Ballistic = 0,
+
+        /// <summary>The components do not go together at all. Not loadable.</summary>
+        Assembly = 1
+    }
+
     /// <summary>Something the validator has to say about a design.</summary>
     public readonly struct DesignIssue
     {
         public readonly DesignIssueSeverity Severity;
         public readonly string Message;
+        public readonly DesignIssueKind Kind;
 
-        public DesignIssue(DesignIssueSeverity severity, string message)
+        public DesignIssue(DesignIssueSeverity severity, string message,
+            DesignIssueKind kind = DesignIssueKind.Ballistic)
         {
             Severity = severity;
             Message = message;
+            Kind = kind;
         }
 
         public override string ToString() => $"[{Severity}] {Message}";
@@ -118,7 +143,13 @@ namespace Krofken.Ballistics
         /// <summary>Everything the validator found.</summary>
         public readonly List<DesignIssue> Issues = new List<DesignIssue>();
 
-        /// <summary>True if nothing blocking was found and the round can be fired.</summary>
+        /// <summary>
+        /// True if the round can be fired safely. Used by the range and by tests.
+        ///
+        /// This is NOT the question the loading bench asks — see <see cref="CanAssemble"/>.
+        /// Do not gate crafting on this, or the player is told their load is dangerous
+        /// before they have ever fired it.
+        /// </summary>
         public bool IsValid
         {
             get
@@ -127,6 +158,40 @@ namespace Krofken.Ballistics
                     if (Issues[i].Severity == DesignIssueSeverity.Error)
                         return false;
                 return true;
+            }
+        }
+
+        /// <summary>
+        /// True if the components actually go together, whatever the round will do when
+        /// fired. THIS is the question the loading bench asks.
+        ///
+        /// A bullet that will not chamber, a charge that will not fit the case, a
+        /// material that does not exist — those are visible on the bench and are refused.
+        /// An overpressure load assembles perfectly well and is allowed to be made; the
+        /// player learns what it does by firing it.
+        /// </summary>
+        public bool CanAssemble
+        {
+            get
+            {
+                for (int i = 0; i < Issues.Count; i++)
+                    if (Issues[i].Severity == DesignIssueSeverity.Error &&
+                        Issues[i].Kind == DesignIssueKind.Assembly)
+                        return false;
+                return true;
+            }
+        }
+
+        /// <summary>The first reason the components will not go together, or null.</summary>
+        public string FirstAssemblyFault
+        {
+            get
+            {
+                for (int i = 0; i < Issues.Count; i++)
+                    if (Issues[i].Severity == DesignIssueSeverity.Error &&
+                        Issues[i].Kind == DesignIssueKind.Assembly)
+                        return Issues[i].Message;
+                return null;
             }
         }
 
@@ -200,7 +265,7 @@ namespace Krofken.Ballistics
             if (!CartridgeCaseLibrary.TryGet(design.CaseId, out var cartridgeCase))
             {
                 baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error,
-                    $"Unknown case '{design.CaseId}'."));
+                    $"Unknown case '{design.CaseId}'.", DesignIssueKind.Assembly));;
                 return baked;
             }
             baked.Case = cartridgeCase;
@@ -208,21 +273,21 @@ namespace Krofken.Ballistics
             if (!PropellantLibrary.TryGet(design.PropellantId, out var propellant))
             {
                 baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error,
-                    $"Unknown propellant '{design.PropellantId}'."));
+                    $"Unknown propellant '{design.PropellantId}'.", DesignIssueKind.Assembly));;
                 return baked;
             }
 
             var geometry = design.Projectile;
             if (!geometry.Validate(out string geometryError))
             {
-                baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error, geometryError));
+                baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error, geometryError, DesignIssueKind.Assembly));
                 return baked;
             }
 
             if (!MaterialLibrary.TryGet(design.Materials.CoreMaterialId, out _))
             {
                 baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error,
-                    $"Unknown core material '{design.Materials.CoreMaterialId}'."));
+                    $"Unknown core material '{design.Materials.CoreMaterialId}'.", DesignIssueKind.Assembly));;
                 return baked;
             }
 
@@ -231,7 +296,8 @@ namespace Krofken.Ballistics
             {
                 baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error,
                     $"Projectile is {Units.MetresToMillimetres(geometry.Calibre):F2} mm but the case is " +
-                    $"{Units.MetresToMillimetres(cartridgeCase.Calibre):F2} mm. It will not chamber."));
+                    $"{Units.MetresToMillimetres(cartridgeCase.Calibre):F2} mm. It will not chamber.",
+                    DesignIssueKind.Assembly));
             }
 
             // ---- Mass properties --------------------------------------------
@@ -239,7 +305,7 @@ namespace Krofken.Ballistics
             if (baked.Mass.Mass <= 0.0)
             {
                 baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error,
-                    "Projectile has no mass -- check that the core material is set."));
+                    "Projectile has no mass -- check that the core material is set.", DesignIssueKind.Assembly));
                 return baked;
             }
 
@@ -273,7 +339,8 @@ namespace Krofken.Ballistics
             {
                 baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error,
                     $"Charge does not fit: {design.ChargeMass * 1e3:F2} g of this grain occupies " +
-                    $"{charge.BulkVolume * 1e6:F2} cm3 poured, but only {chamberVolume * 1e6:F2} cm3 is available."));
+                    $"{charge.BulkVolume * 1e6:F2} cm3 poured, but only {chamberVolume * 1e6:F2} cm3 is available.",
+                    DesignIssueKind.Assembly));
             }
             else if (loadDensity > 0.95)
             {
@@ -296,9 +363,15 @@ namespace Krofken.Ballistics
 
             switch (baked.Interior.Status)
             {
+                // Nonsense inputs mean there is nothing to assemble in the first place.
                 case InteriorBallisticsStatus.InvalidInput:
-                    baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error, baked.Interior.Message));
+                    baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error, baked.Interior.Message,
+                        DesignIssueKind.Assembly));
                     break;
+
+                // A squib and an overpressure both ASSEMBLE perfectly well. One sticks
+                // the bullet in the bore, the other wrecks the gun, and the player is
+                // meant to find out by firing them.
                 case InteriorBallisticsStatus.Squib:
                     baked.Issues.Add(new DesignIssue(DesignIssueSeverity.Error, baked.Interior.Message));
                     break;

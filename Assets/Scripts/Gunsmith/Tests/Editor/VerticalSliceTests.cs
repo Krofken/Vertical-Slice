@@ -447,19 +447,31 @@ namespace Gunsmith.Tests
             Assert.That(_game.Reputation, Is.LessThan(0));
         }
 
+        /// <summary>
+        /// An overcharge is still an unsafe round — but the LOADING BENCH does not say
+        /// so, because a gunsmith cannot see peak pressure by looking at components.
+        /// Whether this particular charge is refused depends on whether it physically
+        /// fits the case; what must never happen is the bench warning about how the
+        /// round will shoot.
+        ///
+        /// The full rule is covered in <c>AssemblyVersusBallisticTests</c>.
+        /// </summary>
         [Test]
-        public void An_Unsafe_Design_Cannot_Be_Loaded_Or_Delivered()
+        public void The_Bench_Does_Not_Warn_That_An_Overcharge_Is_Unsafe()
         {
             var overcharged = ReferenceLoads.Penetrator();
             overcharged.ChargeMass = Units.GrainsToKilograms(10.0);
 
             var design = _game.SaveDesign("hot", "Hot", overcharged);
 
-            Assert.That(design.IsValid, Is.False, "an overcharge must not validate");
+            Assert.That(design.IsValid, Is.False, "an overcharge is still an unsafe round");
 
             var craft = _game.Workshop.Craft(design, 5);
-            Assert.That(craft.Success, Is.False);
-            Assert.That(craft.Message, Does.Contain("safely"));
+            string message = (craft.Message ?? string.Empty).ToLowerInvariant();
+
+            foreach (string banned in new[] { "safely", "unsafe", "pressure", "burst" })
+                Assert.That(message, Does.Not.Contain(banned),
+                    $"the bench leaked '{banned}' about a round nobody has fired");
         }
     }
 }

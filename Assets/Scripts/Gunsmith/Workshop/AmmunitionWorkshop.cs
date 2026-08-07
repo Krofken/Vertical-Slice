@@ -194,10 +194,18 @@ namespace Gunsmith.Workshop
             if (design?.Baked == null)
                 return new CraftResult { Message = "No design selected.", Bill = bill };
 
-            if (!design.Baked.IsValid)
+            // Only refuse what will not GO TOGETHER. A bullet that will not chamber or a
+            // charge that will not fit the case are visible in your hands, and the bench
+            // is right to stop you.
+            //
+            // A load that will burst the case or wreck the gun assembles perfectly well,
+            // and the bench says nothing about it. Warning the player here would hand
+            // them the answer and remove the reason to walk out to the range, which is
+            // the entire game. They find out from the fired case.
+            if (!design.Baked.CanAssemble)
                 return new CraftResult
                 {
-                    Message = "This design will not fire safely. Fix the faults before loading it.",
+                    Message = design.Baked.FirstAssemblyFault ?? "These parts do not go together.",
                     Bill = bill
                 };
 
