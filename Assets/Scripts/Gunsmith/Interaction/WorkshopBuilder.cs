@@ -426,9 +426,19 @@ namespace Gunsmith.Interaction
             return text;
         }
 
-        /// <summary>Nothing this builds is ever serialised, so an editor-time build can
-        /// still never leak into the scene file or raise a save prompt.</summary>
-        private static void Disposable(GameObject go) => go.hideFlags = HideFlags.DontSave;
+        /// <summary>
+        /// Keeps an EDITOR-TIME preview out of the scene file.
+        ///
+        /// Only in the editor, and that condition is the whole point. At runtime nothing
+        /// is serialised anyway, so the flag buys nothing there — and DontSave objects
+        /// are torn down on a domain reload, which is what made the shop and then the
+        /// player evaporate the moment Play was pressed. The flag was correct for
+        /// previews and wrong for the game; it now applies only where it was right.
+        /// </summary>
+        private static void Disposable(GameObject go)
+        {
+            if (!Application.isPlaying) go.hideFlags = HideFlags.DontSave;
+        }
 
         private static Material Flat(Color colour)
         {

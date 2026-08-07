@@ -24,16 +24,20 @@ namespace Gunsmith.EditorTools
         [MenuItem("Gunsmith/Add Workshop To Scene", priority = -10)]
         public static void Add()
         {
-            var existing = GameObject.Find(RootName);
-            if (existing != null)
-            {
-                Selection.activeGameObject = existing;
-                Debug.Log("[Workshop] Already in the scene. Press Play.");
-                return;
-            }
+            var root = GameObject.Find(RootName);
+            if (root == null) root = new GameObject(RootName);
+            if (root.GetComponent<WorkshopBootstrap>() == null) root.AddComponent<WorkshopBootstrap>();
 
-            var root = new GameObject(RootName);
-            root.AddComponent<WorkshopBootstrap>();
+            // ALWAYS reset the transform, including on an object that was already there.
+            //
+            // The shop is built in this object's local space and the player spawns at a
+            // point relative to it, so a stale position puts the whole game somewhere
+            // arbitrary. An earlier version of this tool parked itself in front of
+            // whatever camera it found and that position was saved into the scene, which
+            // is how the gunsmith ended up two hundred metres from his own bench.
+            root.transform.position = Vector3.zero;
+            root.transform.rotation = Quaternion.identity;
+            root.transform.localScale = Vector3.one;
 
             Undo.RegisterCreatedObjectUndo(root, "Add Workshop");
             Selection.activeGameObject = root;

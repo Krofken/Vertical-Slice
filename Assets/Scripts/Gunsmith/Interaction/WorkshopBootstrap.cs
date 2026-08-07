@@ -65,11 +65,25 @@ namespace Gunsmith.Interaction
         /// </summary>
         private PlayerRig BuildPlayer()
         {
+            // Kill any previous body first.
+            //
+            // The player is deliberately NOT parented to the bootstrap, which means an
+            // editor-mode preview leaves an orphan at the scene root that clearing the
+            // preview never touches. Those accumulate, they run their own Update, and
+            // FindAnyObjectByType then returns whichever one it likes — which is how a
+            // "player" ended up two hundred metres away at the same coordinates every
+            // run. There is exactly one gunsmith.
+            foreach (var stale in FindObjectsByType<PlayerRig>(FindObjectsSortMode.None))
+            {
+                if (Application.isPlaying) Destroy(stale.gameObject);
+                else DestroyImmediate(stale.gameObject);
+            }
+
             var existing = Camera.main;
             if (existing != null) existing.gameObject.SetActive(false);
 
             var body = new GameObject("Gunsmith");
-            body.hideFlags = HideFlags.DontSave;
+            Disposable(body);
 
             // NOT parented, and placed in WORLD space.
             //
@@ -95,7 +109,7 @@ namespace Gunsmith.Interaction
             var head = new GameObject("Head").transform;
             head.SetParent(body.transform, false);
             head.localPosition = new Vector3(0f, EyeHeight, 0f);
-            head.gameObject.hideFlags = HideFlags.DontSave;
+            Disposable(head.gameObject);
 
             var camera = head.gameObject.AddComponent<Camera>();
             camera.nearClipPlane = 0.05f;
@@ -111,7 +125,7 @@ namespace Gunsmith.Interaction
             var prompt = new GameObject("Prompt");
             prompt.transform.SetParent(head, false);
             prompt.transform.localPosition = new Vector3(0f, -0.16f, 0.9f);
-            prompt.hideFlags = HideFlags.DontSave;
+            Disposable(prompt);
 
             var text = prompt.AddComponent<TextMesh>();
             text.characterSize = 0.028f;
@@ -124,6 +138,13 @@ namespace Gunsmith.Interaction
             interactor.Prompt = text;
 
             return rig;
+        }
+
+        /// <summary>Editor previews stay out of the scene file; the running game does
+        /// not use the flag at all. See WorkshopBuilder.Disposable.</summary>
+        private static void Disposable(GameObject go)
+        {
+            if (!Application.isPlaying) go.hideFlags = HideFlags.DontSave;
         }
 
         /// <summary>

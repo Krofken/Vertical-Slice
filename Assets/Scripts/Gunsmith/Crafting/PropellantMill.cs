@@ -248,6 +248,18 @@ namespace Gunsmith.Crafting
                 grain.transform.SetParent(GrainTray, false);
                 grain.hideFlags = HideFlags.DontSave;
 
+                // NO COLLIDER. These are a magnified picture of the powder and nothing
+                // ever touches them — but CreatePrimitive fits one by default, and a
+                // couple of dozen colliders sitting in the middle of the bench at ~400x
+                // scale is something the player spawns inside. The character controller
+                // then depenetrates itself and is flung two hundred metres across the
+                // map, which is exactly what happened.
+                var solid = grain.GetComponent<Collider>();
+                if (solid != null)
+                {
+                    if (Application.isPlaying) Destroy(solid); else DestroyImmediate(solid);
+                }
+
                 // Deterministic golden-angle spiral. No random placement anywhere in
                 // this game: the same recipe must always look the same.
                 float angle = i * 2.399963f;
