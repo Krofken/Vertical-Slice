@@ -69,14 +69,28 @@ namespace Gunsmith.Interaction
             if (existing != null) existing.gameObject.SetActive(false);
 
             var body = new GameObject("Gunsmith");
-            body.transform.SetParent(transform, false);
-            body.transform.localPosition = PlayerStart;
             body.hideFlags = HideFlags.DontSave;
+
+            // NOT parented, and placed in WORLD space.
+            //
+            // A CharacterController moves in world space and inherits nothing useful
+            // from a parent, but it does inherit a parent's position, rotation and
+            // scale - so hanging the player off the bootstrap meant the spawn point
+            // depended on wherever that object happened to sit. Standing free removes
+            // a whole class of "spawns somewhere odd" entirely.
+            body.transform.position = transform.TransformPoint(PlayerStart);
 
             var controller = body.AddComponent<CharacterController>();
             controller.height = 1.8f;
             controller.radius = 0.3f;
             controller.center = new Vector3(0f, 0.9f, 0f);
+
+            // Put the feet ON the floor rather than trusting a hand-written height.
+            // Physics.SyncTransforms first, because the floor was created this same
+            // frame and its collider is not in the physics scene until it is synced -
+            // without this the cast finds nothing and the player is dropped into space.
+            Physics.SyncTransforms();
+            StandOnFloor(body.transform);
 
             var head = new GameObject("Head").transform;
             head.SetParent(body.transform, false);
@@ -112,8 +126,27 @@ namespace Gunsmith.Interaction
             return rig;
         }
 
-        /// <summary>Gives the shop a floor to stand on, so the controller has something
-        /// to rest against.</summary>
+        /// <summary>
+        /// Drops the body until its feet are on whatever is below, so a spawn height
+        /// never has to be guessed. Falls back to the requested height if there is
+        /// nothing under the spawn point at all.
+        /// </summary>
+        private static void StandOnFloor(Transform body)
+        {
+            Vector3 above = body.position + Vector3.up * 4f;
+
+            if (!Physics.Raycast(above, Vector3.down, out var hit, 12f))
+            {
+                Debug.LogWarning("[Bootstrap] Nothing under the spawn point - the player " +
+                                 "would fall. Leaving them where they are.");
+                return;
+            }
+
+            // A hair above the surface so the controller settles rather than starting
+            // interpenetrated, which makes it tunnel.
+            body.position = hit.point + Vector3.up * 0.05f;
+        }
+
         private void Reset() => PlayerStart = new Vector3(0f, 1.0f, -3.2f);
     }
 }
