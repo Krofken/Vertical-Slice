@@ -3,7 +3,8 @@
     "rootNamespace": "Gunsmith",
     "references": [
         "Krofken.Ballistics",
-        "Krofken.Ballistics.Unity"
+        "Krofken.Ballistics.Unity",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

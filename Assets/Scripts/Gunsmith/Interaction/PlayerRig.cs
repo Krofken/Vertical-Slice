@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Gunsmith.Interaction
 {
@@ -10,9 +11,11 @@ namespace Gunsmith.Interaction
     /// yard and look at a block — is something you do by GOING THERE. That is the whole
     /// reason the evidence rack works: you walk down the row.
     ///
-    /// Deliberately minimal for the slice. No model, no animation, no footsteps: a
-    /// capsule with a CharacterController and a head. What matters now is that the
-    /// player occupies space and has to cross it.
+    /// INPUT SYSTEM, not the legacy Input class. The project has active input handling
+    /// set to the Input System package, so every UnityEngine.Input call throws at
+    /// runtime — which is exactly what the first version of this did. Read devices
+    /// directly off Keyboard.current and Mouse.current; both are null when no device is
+    /// attached, so every access is guarded.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     [AddComponentMenu("Gunsmith/Player Rig")]
@@ -29,7 +32,10 @@ namespace Gunsmith.Interaction
         public float Gravity = 18f;
 
         [Header("Looking")]
-        public float MouseSensitivity = 2.2f;
+        [Tooltip("Degrees per pixel of mouse movement. Input System reports raw pixel " +
+                 "deltas, not the smoothed axis the old input class gave, so this is " +
+                 "much smaller than a legacy sensitivity would be.")]
+        public float LookSensitivity = 0.09f;
 
         [Tooltip("How far up and down you can look, degrees.")]
         public float PitchLimit = 85f;
@@ -38,8 +44,8 @@ namespace Gunsmith.Interaction
         public Transform Head;
 
         [Header("Cursor")]
-        [Tooltip("Lock and hide the cursor on start. Escape releases it, which you will " +
-                 "want constantly while the bench handles are still dragged with the mouse.")]
+        [Tooltip("Lock and hide the cursor on start. Escape releases it, which you want " +
+                 "whenever you are working the bench rather than walking.")]
         public bool LockCursor = true;
 
         private CharacterController _controller;
@@ -59,12 +65,14 @@ namespace Gunsmith.Interaction
             if (LockCursor) SetCursorLocked(true);
         }
 
+        private void OnDisable() => SetCursorLocked(false);
+
         private void Update()
         {
             HandleCursor();
 
-            // Only steer when the cursor is captured, so releasing it hands the mouse
-            // back to the bench handles rather than spinning the room.
+            // Only steer while the cursor is captured, so releasing it hands the mouse
+            // back to the bench without spinning the room.
             if (Cursor.lockState == CursorLockMode.Locked) Look();
 
             Move();
@@ -72,12 +80,12 @@ namespace Gunsmith.Interaction
 
         private void HandleCursor()
         {
-            if (Input.GetKeyDown(KeyCode.Escape)) SetCursorLocked(false);
+            var keyboard = Keyboard.current;
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) SetCursorLocked(false);
 
-            // Clicking back into the view recaptures it, but not while the player is
-            // dragging a lathe handle — that click belongs to the bench.
-            if (Cursor.lockState != CursorLockMode.Locked
-                && Input.GetMouseButtonDown(1))
+            var mouse = Mouse.current;
+            if (mouse != null && Cursor.lockState != CursorLockMode.Locked
+                && mouse.rightButton.wasPressedThisFrame)
                 SetCursorLocked(true);
         }
 
@@ -89,32 +97,43 @@ namespace Gunsmith.Interaction
 
         private void Look()
         {
-            float yaw = Input.GetAxisRaw("Mouse X") * MouseSensitivity;
-            float pitch = Input.GetAxisRaw("Mouse Y") * MouseSensitivity;
+            var mouse = Mouse.current;
+            if (mouse == null) return;
+
+            Vector2 delta = mouse.delta.ReadValue() * LookSensitivity;
 
             // Yaw turns the body, pitch tilts only the head — otherwise looking down
             // would tip the whole character over.
-            transform.Rotate(0f, yaw, 0f, Space.Self);
+            transform.Rotate(0f, delta.x, 0f, Space.Self);
 
-            _pitch = Mathf.Clamp(_pitch - pitch, -PitchLimit, PitchLimit);
+            _pitch = Mathf.Clamp(_pitch - delta.y, -PitchLimit, PitchLimit);
             Head.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
         }
 
         private void Move()
         {
-            float forward = (Input.GetKey(KeyCode.W) ? 1f : 0f) - (Input.GetKey(KeyCode.S) ? 1f : 0f);
-            float strafe = (Input.GetKey(KeyCode.D) ? 1f : 0f) - (Input.GetKey(KeyCode.A) ? 1f : 0f);
+            var keyboard = Keyboard.current;
+
+            float forward = 0f, strafe = 0f;
+            bool hurry = false;
+
+            if (keyboard != null)
+            {
+                if (keyboard.wKey.isPressed) forward += 1f;
+                if (keyboard.sKey.isPressed) forward -= 1f;
+                if (keyboard.dKey.isPressed) strafe += 1f;
+                if (keyboard.aKey.isPressed) strafe -= 1f;
+                hurry = keyboard.leftShiftKey.isPressed;
+            }
 
             Vector3 wish = transform.forward * forward + transform.right * strafe;
             if (wish.sqrMagnitude > 1f) wish.Normalize();
-
-            float speed = Input.GetKey(KeyCode.LeftShift) ? FastSpeed : WalkSpeed;
 
             // Stay pinned to the floor. There is no jumping in a workshop.
             if (_controller.isGrounded && _fallSpeed < 0f) _fallSpeed = -2f;
             _fallSpeed -= Gravity * Time.deltaTime;
 
-            Vector3 motion = wish * speed;
+            Vector3 motion = wish * (hurry ? FastSpeed : WalkSpeed);
             motion.y = _fallSpeed;
 
             _controller.Move(motion * Time.deltaTime);

@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Gunsmith.Interaction
 {
@@ -76,8 +77,9 @@ namespace Gunsmith.Interaction
     [AddComponentMenu("Gunsmith/Player Interactor")]
     public sealed class PlayerInteractor : MonoBehaviour
     {
-        [Tooltip("Key that uses whatever is being looked at.")]
-        public KeyCode UseKey = KeyCode.E;
+        [Tooltip("Key that uses whatever is being looked at. Input System, because " +
+                 "the project has legacy input handling switched off.")]
+        public Key UseKey = Key.E;
 
         [Tooltip("Where the prompt is drawn. Sits just in front of the eyes.")]
         public TextMesh Prompt;
@@ -98,7 +100,9 @@ namespace Gunsmith.Interaction
             if (Prompt != null)
                 Prompt.text = _looking != null ? $"[{UseKey}]  {_looking.Prompt}" : string.Empty;
 
-            if (_looking != null && Input.GetKeyDown(UseKey)) _looking.Use();
+            var keyboard = Keyboard.current;
+            if (_looking != null && keyboard != null && keyboard[UseKey].wasPressedThisFrame)
+                _looking.Use();
         }
 
         /// <summary>Nearest interactable the player is actually facing, or null.</summary>
