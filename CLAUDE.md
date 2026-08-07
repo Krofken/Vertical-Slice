@@ -335,6 +335,34 @@ noise on a solver input. If a field feeds a number the solvers read, declare it
 shape, which doesn't change in flight. Baking is the real performance win, not
 micro-optimisation.
 
+### Measured cost, so this stops being re-litigated
+
+Taken 2026-08-07 on the development machine, Release build:
+
+| | cost |
+|---|---|
+| Bake a complete cartridge — interior ODE, mass integration, full drag curve | **0.881 ms** (~1135/second) |
+| Terminal solve, per impact | **0.030 ms** |
+| Trajectory RK4 step | **0.183 µs** |
+
+**Nothing here simulates individual grains, and nothing simulates gas as a fluid.** The
+interior model is lumped-parameter: the whole charge is one scalar `z`, the fraction of
+the web burnt through, and the grain form is three closed-form coefficients in
+`psi(z) = chi*z*(1 + lambda*z + mu*z^2)`. The gas is one pressure from the Nobel-Abel
+equation of state, with a covolume term because propellant gas at 300 MPa is dense
+enough that its own molecular volume matters — dropping it visibly overestimates peak
+pressure.
+
+The only per-grain objects in the project are the ~24 cosmetic spheres
+`PropellantMill` drops in its tray so a coarse powder visibly *is* coarse. They are
+editor-side presentation and never touch a solver.
+
+**So the "store the energy instead of simulating it" optimisation is already the
+architecture**, and there is nothing left to reclaim: a night is six to eight actions,
+and you would need to commit a thousand designs a second to notice the bake. If
+performance ever does bite it will be mesh rebuilds or scene objects, not the solver.
+Measure before trading away physics.
+
 **Optimise the solver, not the game loop.** The ballistics core is hard-optimised:
 blittable structs, zero GC allocation, Burst-friendly, no LINQ or virtual dispatch in
 the inner loop. Orders, inventory and the day cycle run a few times per *second* —
