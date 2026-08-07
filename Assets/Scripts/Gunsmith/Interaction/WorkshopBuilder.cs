@@ -84,7 +84,10 @@ namespace Gunsmith.Interaction
             yard.Rack = shop.Rack;
             shop.Yard = yard;
 
-            shop.Status = Label(root.transform, "Status", new Vector3(2.45f, 1.05f, 0f), 0.024f);
+            // On the back wall above the evidence rack, where you are already looking
+            // when you walk over to read a block. It was floating in mid-air off to the
+            // right, half of every line past the edge of the screen.
+            shop.Status = Label(root.transform, "Status", new Vector3(2.55f, 1.95f, 1.26f), 0.024f);
 
             BuildStationControls(root.transform, shop);
 
@@ -108,8 +111,11 @@ namespace Gunsmith.Interaction
 
         private OrderBoardView BuildBoard(Transform parent)
         {
+            // IN FRONT of the backing board, not behind it. The wall is at z = 1.30 and
+            // the cork the cards are pinned to sits just off it; a card at 1.28 with the
+            // backing at 1.18 was hidden behind the very thing it is pinned to.
             var go = Empty(parent, "Order board",
-                new Vector3(-2.9f, 1.7f, 1.28f), Vector3.one * BoardScale);
+                new Vector3(-2.9f, 1.7f, 1.22f), Vector3.one * BoardScale);
 
             var board = go.AddComponent<OrderBoardView>();
             board.CardMaterial = Mat(_palette?.Card, Defaults.Card);
@@ -344,8 +350,10 @@ namespace Gunsmith.Interaction
                 new Vector3(-2.2f, 0.5f, 0.2f), new Vector3(1.5f, 1.0f, 0.7f), fixtureMaterial);
             Use(counter, "hand the batch over", 2.4f, ShopAction.HandOverBatch);
 
+            // The cork behind the cards, flat against the wall. Must sit at a HIGHER z
+            // than the cards or it draws over them.
             var boardFace = Primitive(PrimitiveType.Cube, parent, "Board face",
-                new Vector3(-2.9f, 1.7f, 1.18f), new Vector3(1.5f, 1.2f, 0.06f), fixtureMaterial);
+                new Vector3(-2.9f, 1.7f, 1.27f), new Vector3(1.9f, 1.5f, 0.05f), fixtureMaterial);
             Use(boardFace, "take the next job", 2.6f, ShopAction.TakeJob);
 
             var firing = Primitive(PrimitiveType.Cube, parent, "Firing point",

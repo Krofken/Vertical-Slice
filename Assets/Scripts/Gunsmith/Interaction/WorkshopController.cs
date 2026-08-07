@@ -38,6 +38,13 @@ namespace Gunsmith.Interaction
         [Tooltip("The day and phase, and what the shop is short of. No performance figures.")]
         public TextMesh Status;
 
+        [Tooltip("How much wall the status may occupy, metres. It is scaled to fit this, " +
+                 "so a longer line can never run off the edge of the screen.")]
+        public Vector2 StatusSize = new Vector2(1.30f, 0.70f);
+
+        private Vector3 _statusRestScale;
+        private bool _statusScaleKnown;
+
         /// <summary>
         /// The run in progress.
         ///
@@ -222,6 +229,22 @@ namespace Gunsmith.Interaction
             text.Append($"{game.Notebook.Count} shots fired");
 
             Status.text = text.ToString();
+
+            // FIT IT AFTER WRITING IT. The readout changes every refresh — a longer
+            // phase name, a four-digit purse, a design name on the shelf line — so a
+            // character size that fits today runs off the screen tomorrow. That is
+            // exactly what it did.
+            //
+            // Reset to the resting scale first: Fit multiplies, so re-fitting an already
+            // shrunk label every refresh would shrink it away to nothing.
+            if (!_statusScaleKnown)
+            {
+                _statusRestScale = Status.transform.localScale;
+                _statusScaleKnown = true;
+            }
+
+            Status.transform.localScale = _statusRestScale;
+            TextFit.Fit(Status, StatusSize);
         }
     }
 }

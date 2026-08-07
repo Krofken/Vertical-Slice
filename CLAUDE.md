@@ -409,7 +409,7 @@ unstable, and ruinously expensive.
 
 ## Verification practice
 
-All three suites stay green: **190/190 EditMode and 3/3 PlayMode in Unity, 70/70
+All three suites stay green: **197/197 EditMode and 3/3 PlayMode in Unity, 70/70
 outside** via `dotnet test`. The outside-Unity run is what proves the core is still
 portable to the other project — if it breaks, a Unity dependency leaked into the core.
 
@@ -469,6 +469,22 @@ fixed column. The positive assertion failed loudly, which was the easy half. The
 dangerous half was the negative one: a leaked technical spec would be wrapped too, so
 `Does.Not.Contain` could never have caught the leak the test exists to catch. It was
 passing by accident. Collapse whitespace on both sides before comparing display text.
+
+**`TextMesh` has no layout, so never hand-pick a character size.** It does not wrap, does
+not clip, and does not know how big the card it is written on is. Both readouts in the
+shop were sized by a constant and both were wrong — the order cards rendered **4x wider
+and 6x taller than the card**, so three briefs 36 cm apart overprinted into a smear, and
+the status ran off the side of the screen. A constant cannot fix it either, because the
+text changes: a longer name or one more requirement overflows again. `TextFit` measures
+what was actually rendered and scales to fit. Two traps in doing so: bounds are only
+valid once the object is fully built, so fit in a SECOND PASS after the cards exist; and
+fitting multiplies scale, so reset to a stored resting scale before re-fitting or the
+label shrinks away over successive refreshes.
+
+**Check what is in front of what.** The clickable cork board sat at z = 1.18 with the
+cards pinned at 1.28, so the board drew over the very cards it was holding. Fixed by
+depth ordering, but the general lesson is that a flat-quad UI in world space needs its
+layering thought about explicitly.
 
 **A delegate cannot be saved, and a dead fixture has no symptom.** `Interactable.Used`
 was a `System.Action` assigned by the builder. That is invisible to serialisation, so

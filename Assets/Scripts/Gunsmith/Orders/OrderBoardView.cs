@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Gunsmith.GameLoop;
+using Gunsmith.Interaction;
 using UnityEngine;
 
 namespace Gunsmith.Orders
@@ -23,16 +24,20 @@ namespace Gunsmith.Orders
     public sealed class OrderBoardView : MonoBehaviour
     {
         [Header("Layout")]
-        public float CardSpacing = 0.42f;
-        public float AcceptedDrop = 0.55f;
+        [Tooltip("Distance between cards, metres. Must exceed CardSize.x or they touch.")]
+        public float CardSpacing = 0.56f;
+
+        public float AcceptedDrop = 0.62f;
 
         [Header("Appearance")]
         public Material CardMaterial;
         public Material AcceptedCardMaterial;
         public Color TextColour = new Color(0.12f, 0.10f, 0.08f);
 
-        [Tooltip("Card size in metres.")]
-        public Vector2 CardSize = new Vector2(0.36f, 0.46f);
+        [Tooltip("Card size in metres. A whole brief has to be legible on this, so it " +
+                 "is nearer an index card than a business card — the text is fitted to " +
+                 "whatever this is, and a small card just means small print.")]
+        public Vector2 CardSize = new Vector2(0.50f, 0.62f);
 
         private readonly List<GameObject> _cards = new List<GameObject>();
 
@@ -61,6 +66,32 @@ namespace Gunsmith.Orders
                 Pin(accepted.Order, new Vector3(taken * CardSpacing, -AcceptedDrop, 0f),
                     AcceptedCardMaterial, taken: true);
                 taken++;
+            }
+
+            FitAll();
+        }
+
+        /// <summary>
+        /// Scales every card's text down until it fits the card.
+        ///
+        /// A SECOND PASS, and it has to be. A TextMesh reports empty renderer bounds
+        /// immediately after the component is added — the mesh has not been generated
+        /// yet — so fitting inside the same call that creates it measures nothing and
+        /// silently does nothing at all. That is precisely how the board ended up with
+        /// three briefs drawn on top of one another: the fit was there, it just never
+        /// ran. Measure once every card exists.
+        /// </summary>
+        private void FitAll()
+        {
+            foreach (var card in _cards)
+            {
+                if (card == null) continue;
+
+                var surface = card.GetComponent<Renderer>();
+                var text = card.GetComponentInChildren<TextMesh>();
+                if (surface == null || text == null) continue;
+
+                TextFit.FitTo(text, surface, margin: 0.92f);
             }
         }
 
@@ -176,7 +207,6 @@ namespace Gunsmith.Orders
             // The card is a unit quad scaled to size, so the text has to undo that
             // scale or it stretches with the card.
             go.transform.localScale = new Vector3(1f / CardSize.x, 1f / CardSize.y, 1f);
-            go.transform.localPosition = new Vector3(-0.45f, 0.45f, -0.001f);
 
             var text = go.AddComponent<TextMesh>();
             text.text = content;
@@ -185,6 +215,11 @@ namespace Gunsmith.Orders
             text.color = TextColour;
             text.anchor = TextAnchor.UpperLeft;
             text.alignment = TextAlignment.Left;
+
+            // Top-left corner of the card, in the card's own unit space. Fitting happens
+            // in FitAll once every card exists — see the note there for why it cannot
+            // happen here.
+            go.transform.localPosition = new Vector3(-0.46f, 0.46f, -0.001f);
         }
     }
 }

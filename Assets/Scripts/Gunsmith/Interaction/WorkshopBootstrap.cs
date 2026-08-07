@@ -94,7 +94,7 @@ namespace Gunsmith.Interaction
             // FindAnyObjectByType then returns whichever one it likes — which is how a
             // "player" ended up two hundred metres away at the same coordinates every
             // run. There is exactly one gunsmith.
-            foreach (var stale in FindObjectsByType<PlayerRig>(FindObjectsSortMode.None))
+            foreach (var stale in FindObjectsByType<PlayerRig>(FindObjectsInactive.Include))
             {
                 if (Application.isPlaying) Destroy(stale.gameObject);
                 else DestroyImmediate(stale.gameObject);
