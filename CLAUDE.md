@@ -669,6 +669,71 @@ existing rig first. There is exactly one gunsmith.
 exaggerating roughly forty times before it is worth looking at; a gel block is already
 person-sized. Only rig transforms are scaled — never anything a solver reads.
 
+### Known broken, in priority order — START HERE
+
+Written down 2026-08-08 after actually playing it. Everything below was seen on
+screen, not inferred. **Do these before anything else, and verify each by looking at
+the running game rather than by measuring the thing you just changed.**
+
+1. **Powder charging is the wrong interaction entirely.** Replace the beam-and-poise
+   abstraction with a physical pour: hold a container over the case, tilt it, powder
+   flows in, stop when you like. The reference the user gave is Schedule I's
+   watering-can. The charge mass is already simulated and tested — this is an INPUT
+   METHOD over `CartridgeDesign.ChargeMass`, not new physics. Coarse pour then fine
+   trickle, because pure pour-until-you-stop cannot hit 5.5 grains.
+
+2. **`LatheStation` handles do not drag.** "Turn the bullet" leans in and then nothing
+   responds. `LatheHandle` reads `Mouse.current` and builds an aim ray, and the cursor
+   is released on focus — find out which half is failing.
+
+3. **`SeatingStop` does not respond either.** Same symptom, probably the same cause.
+
+4. **The press handle produces nothing.** "Pull the press handle" appears to do
+   nothing; the batch never arrives.
+
+5. **The lean-in poses are wrong.** `StationView.EyeOffset` values were picked by
+   arithmetic, never by eye. The powder balance shows the beam edge-on with the pan
+   cut off the side of the screen. Sit in each one and adjust — the gizmos draw the
+   eye and the look target for exactly this.
+
+6. **The mill is unreadable.** You cannot tell what it is for or what the knobs do.
+   Its purpose is the burn rate, and it is the sharpest pressure lever on the bench —
+   on one 5.5 gr charge, changing ONLY the web:
+
+   | web | muzzle velocity | peak pressure |
+   |---|---|---|
+   | 15 µm | 366 m/s | 499 MPa — the case ruptures |
+   | 30 µm | 337 m/s | 262 MPa |
+   | 60 µm | 258 m/s | 128 MPa, only 71% burnt |
+
+   Finer is not better. Finer bursts the case; coarser throws unburnt powder out of
+   the muzzle as flash. None of that is visible at the station.
+
+### The bug shape that keeps recurring
+
+**A component must find its own parts. Do not trust whoever built it.**
+
+This has now caused four separate failures, each silent:
+
+- `Interactable.Used` is a delegate, so a prefab came back with every fixture inert
+- `WorkshopBootstrap.Shop` was a read-only property, so it rebuilt over hand-placed work
+- `PlayerRig` cached its rest pose in `Awake`, one line before `Head` was assigned,
+  putting the eye 10 cm off the floor
+- `WorkshopController.Yard` was null, so firing answered "no yard" forever
+
+The fix is the same every time: resolve lazily, adopt what is already in the
+hierarchy, and leave anything explicitly assigned alone. **Check the remaining
+construction-time wiring for the same shape before it bites a fifth time.**
+
+### And the verification rule that was learned the hard way
+
+**Never stage the camera to check something.** Every screenshot taken to "verify" the
+shop had the camera positioned by hand first, which bypassed the broken path and made
+it look correct while the game was unplayable. 199 EditMode tests passed at the same
+time, because not one of them entered play mode with a player in it. If a check cannot
+be done by pressing Play and looking, it is not a check. See
+`Tests/Runtime/StandingUpPlayTests`.
+
 ### Known gap: it does not look like a shop yet
 
 Everything above is built out of `PrimitiveType.Cube`, `Sphere` and `Cylinder` in flat
