@@ -39,7 +39,16 @@ namespace Gunsmith.Range
         public Material CardMaterial;
         public Material ProjectileMaterial;
 
+        [Header("Fired case")]
+        public Material BrassMaterial;
+        public Material PrimerMaterial;
+        public Material MarkMaterial;
+
         private readonly List<GelBlockView> _blocks = new List<GelBlockView>();
+        private readonly List<FiredCaseView> _cases = new List<FiredCaseView>();
+
+        /// <summary>Fired cases on the rack, one per shot, in shot order.</summary>
+        public IReadOnlyList<FiredCaseView> Cases => _cases;
 
         /// <summary>Blocks currently on the rack.</summary>
         public IReadOnlyList<GelBlockView> Blocks => _blocks;
@@ -52,6 +61,18 @@ namespace Gunsmith.Range
         /// <param name="loaded">Geometry as loaded, for the recovered slug.</param>
         /// <param name="medium">Medium the block is made of.</param>
         public GelBlockView Add(NotebookEntry entry, in ProjectileGeometry loaded, in TargetMedium medium)
+            => Add(entry, loaded, medium, default, false);
+
+        /// <summary>
+        /// Adds the block AND the brass for a shot.
+        ///
+        /// The case is the other half of the evidence. The block says what the round did
+        /// to the target; the case says what it did to the gun, and it is the only thing
+        /// that ever tells the player their load was running hot.
+        /// </summary>
+        public GelBlockView Add(
+            NotebookEntry entry, in ProjectileGeometry loaded, in TargetMedium medium,
+            in FiredCase fired, bool includeCase)
         {
             if (entry == null) return null;
 
@@ -72,8 +93,25 @@ namespace Gunsmith.Range
             view.ProjectileMaterial = ProjectileMaterial;
 
             view.Show(entry.Measurement, loaded, medium);
-
             _blocks.Add(view);
+
+            if (includeCase)
+            {
+                // Stands just in front of its own block, so brass and block are read
+                // together rather than being two separate lists to cross-reference.
+                var brass = new GameObject("Fired case");
+                brass.transform.SetParent(go.transform, false);
+                brass.transform.localPosition = new Vector3(0f, -0.10f, 0.06f);
+
+                var caseView = brass.AddComponent<FiredCaseView>();
+                caseView.BrassMaterial = BrassMaterial;
+                caseView.PrimerMaterial = PrimerMaterial;
+                caseView.MarkMaterial = MarkMaterial;
+                caseView.Show(fired);
+
+                _cases.Add(caseView);
+            }
+
             return view;
         }
 
@@ -117,6 +155,9 @@ namespace Gunsmith.Range
         [Tooltip("Fire through four layers of denim, the standard heavy-clothing test.")]
         public bool ThroughClothing;
 
+        /// <summary>The brass from the last shot. Read it, do not print it.</summary>
+        public FiredCase LastCase { get; private set; }
+
         /// <summary>
         /// Fires one round of a design into a block and racks the result.
         ///
@@ -145,8 +186,12 @@ namespace Gunsmith.Range
                 return false;
             }
 
+            // The brass is read from what the interior solve actually did, so the case
+            // in the player's hand is the pressure gauge for the round they just fired.
+            LastCase = FiredCaseReader.Read(entry.Measurement.PeakPressure, design.Baked.Case);
+
             if (Rack != null)
-                Rack.Add(entry, design.Design.Projectile, TargetMediumLibrary.Get(MediumId));
+                Rack.Add(entry, design.Design.Projectile, TargetMediumLibrary.Get(MediumId), LastCase, true);
 
             return true;
         }

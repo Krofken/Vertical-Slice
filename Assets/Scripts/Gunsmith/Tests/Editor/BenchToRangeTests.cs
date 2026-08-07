@@ -181,5 +181,33 @@ namespace Gunsmith.Tests
             Assert.That(entry, Is.Not.Null);
             Assert.That(_rack.Blocks.Count, Is.EqualTo(1));
         }
+
+        /// <summary>
+        /// THE PRESSURE GAUGE. A hot load has to come back as marked brass, because that
+        /// is the only way the player is ever told their load was running hard — the
+        /// bench says nothing and the range shows no numbers.
+        /// </summary>
+        [Test]
+        public void A_Hot_Load_Comes_Back_As_Marked_Brass()
+        {
+            _press.BatchSize = 2;
+            _press.PressBatch(_game, "mild", "Mild");
+            _yard.TryFire(_game, "mild", out _, out _);
+
+            var mildBrass = _yard.LastCase;
+            Assert.That(mildBrass.IsUnremarkable, Is.True,
+                $"a service load should leave clean brass, got: {mildBrass.Describe()}");
+
+            _press.Mill.SetWeb(2.5e-5);
+            _press.PressBatch(_game, "hot", "Hot");
+            _yard.TryFire(_game, "hot", out _, out string why);
+
+            var hotBrass = _yard.LastCase;
+            Assert.That(hotBrass.IsUnremarkable, Is.False, $"a hot load left clean brass: {why}");
+            Assert.That((int)hotBrass.Primer, Is.GreaterThan((int)mildBrass.Primer),
+                "the primer must show it ran harder");
+
+            Assert.That(_rack.Cases.Count, Is.EqualTo(2), "both cases must be on the rack");
+        }
     }
 }

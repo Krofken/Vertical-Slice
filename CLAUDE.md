@@ -206,10 +206,28 @@ which is the whole game. A test asserts the bench never leaks the words *pressur
 unsafe, safely, burst, rupture* or *velocity* about a round nobody has fired — that
 assertion is the guard on the rule.
 
-Still missing: the **physical consequence** of firing one. Peak pressure is supposed to
-read as a flattened primer, an ejector mark, a split neck; a wrecked gun is supposed to
-be a wrecked gun. The round now fires and the notebook records it, but nothing hands the
-player the burst case yet.
+**The tell is built** — `FiredCase` / `FiredCaseReader` in the core, `FiredCaseView` in
+Unity, racked beside its block by `EvidenceRack`. Peak pressure now reads as brass.
+
+The ordering is the physical part and it is asserted: the primer cup is softer than the
+head and unsupported over the pin hole, so it yields first; brass then extrudes into the
+pin hole and the ejector hole; then the pocket lets go; then the case splits. A property
+test sweeps pressure upward and fails if any sign ever walks backwards — brass does not
+un-flow.
+
+**The thresholds start AT the case's rated maximum, not below it**, and that calibration
+matters more than it looks. A rating is a working limit brass survives repeatedly, and
+the project's own calibrated 9 mm runs at ~95% of the CIP limit. The first attempt put
+the first sign at 0.80 and made the *reference load* come back with a flattened primer —
+at which point every load looks hot and the gauge says nothing at all.
+
+`FiredCase.PressureFraction` exists for the renderer to scale a bulge by. **It is a
+pressure reading by another name and must never be printed, labelled or put in a
+tooltip.** A test asserts `Describe()` contains no digit and no predictive word.
+
+Still missing: the gun itself. A ruptured case means gas in the action, and the canon's
+one sanctioned hard constraint is that a barrel fed extreme pressure should wear and
+eventually let go. Nothing models that yet.
 
 ## Crafting: operate tools, don't fill in a form
 
