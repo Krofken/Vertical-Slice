@@ -234,11 +234,30 @@ namespace Gunsmith.Crafting
             refiner.RowButton = BenchScreen.Button(machine.transform, "Row", "▼",
                 new Vector3(-0.050f, 0.013f, face), new Color(0.45f, 0.50f, 0.60f));
 
-            refiner.LessButton = BenchScreen.Button(machine.transform, "Less", "◀",
-                new Vector3(-0.024f, 0.013f, face), new Color(0.55f, 0.75f, 0.95f));
+            // THE DIAL, turned with the mouse wheel. A wheel rather than a pair of arrows because
+            // the web now has forty-eight steps across its range and clicking through those is
+            // tedious — fine-tuning a grain size is what a dial is for. Laid on its side so the
+            // knurled edge faces the player, like a real instrument's thumbwheel.
+            var dial = BenchScreen.Body(machine.transform, "Dial",
+                new Vector3(-0.014f, 0.013f, face - 0.002f),
+                new Vector3(0.030f, 0.030f, 0.030f), new Color(0.55f, 0.75f, 0.95f));
 
-            refiner.MoreButton = BenchScreen.Button(machine.transform, "More", "▶",
-                new Vector3(0.002f, 0.013f, face), new Color(0.55f, 0.75f, 0.95f));
+            var wheel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            wheel.name = "Wheel";
+            wheel.transform.SetParent(dial, false);
+            wheel.transform.localScale = new Vector3(1f, 0.22f, 1f);
+
+            var wheelSolid = wheel.GetComponent<Collider>();
+            if (wheelSolid != null) Destroy(wheelSolid);
+
+            wheel.GetComponent<MeshRenderer>().sharedMaterial =
+                Interaction.WorkshopPalette.Flat(new Color(0.55f, 0.75f, 0.95f));
+
+            // The cube is only there to be aimed at; the cylinder is what is seen.
+            var body = dial.GetComponent<MeshRenderer>();
+            if (body != null) body.enabled = false;
+
+            refiner.Dial = wheel.transform;
 
             refiner.RefineButton = BenchScreen.Button(machine.transform, "Refine", "PRESS",
                 new Vector3(0.042f, 0.013f, face), new Color(0.85f, 0.65f, 0.30f));

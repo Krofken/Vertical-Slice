@@ -53,16 +53,23 @@ namespace Gunsmith.Crafting
 
         [Header("Buttons")]
         public Transform RowButton;
-        public Transform LessButton;
-        public Transform MoreButton;
         public Transform RefineButton;
+
+        [Header("Dial")]
+        [Tooltip("The wheel, turned with the mouse wheel. A dial rather than a pair of arrows " +
+                 "because the web has enough steps that clicking through them is tedious, and " +
+                 "fine-tuning a grain size is exactly what a wheel is for.")]
+        public Transform Dial;
+
+        [Tooltip("Degrees the wheel turns per step, so the amount you have moved is visible.")]
+        public float DegreesPerStep = 14f;
 
         [Header("Handling")]
         public float Reach = 2.4f;
 
-        [Tooltip("Steps across the web's whole range. Twelve is fine enough to matter and coarse " +
-                 "enough to reach either end without wearing the button out.")]
-        [Range(4, 40)] public int WebSteps = 12;
+        [Tooltip("Steps across the web's whole range. Generous, because a wheel makes many steps " +
+                 "cheap to cross where a button did not — which is the point of having one.")]
+        [Range(4, 120)] public int WebSteps = 48;
 
         [Header("Appearance")]
         public Color Normal = new Color(0.62f, 0.95f, 0.68f);
@@ -166,13 +173,60 @@ namespace Gunsmith.Crafting
         private void Update()
         {
             var mouse = Mouse.current;
-            if (mouse == null || !mouse.leftButton.wasPressedThisFrame) return;
+            if (mouse == null) return;
 
-            if (Pressed(RowButton)) NextRow();
-            else if (Pressed(MoreButton)) Step(+1);
-            else if (Pressed(LessButton)) Step(-1);
-            else if (Pressed(RefineButton)) Refine();
+            if (mouse.leftButton.wasPressedThisFrame)
+            {
+                if (Pressed(RowButton)) NextRow();
+                else if (Pressed(RefineButton)) Refine();
+            }
+
+            Turn(mouse);
         }
+
+        /// <summary>
+        /// Turns the dial with the mouse wheel.
+        ///
+        /// ONLY WHILE LEANING IN AT THIS STATION. The wheel is a global input with no aim attached,
+        /// so without that gate scrolling anywhere in the shop would quietly re-mill the powder —
+        /// and the player would have no idea why their load changed. The canon already says the
+        /// mouse belongs to the work once you are at the bench, which is exactly this.
+        ///
+        /// Stepped rather than continuous: the scroll delta is a notch count on Windows and a
+        /// smooth value on a trackpad, so accumulating and consuming whole notches behaves the same
+        /// on both instead of racing on one of them.
+        /// </summary>
+        private void Turn(Mouse mouse)
+        {
+            if (!Leaning) { _notch = 0f; return; }
+
+            float scroll = mouse.scroll.ReadValue().y;
+            if (Mathf.Abs(scroll) < 0.01f) return;
+
+            // A Windows notch is 120; a trackpad sends far smaller values.
+            _notch += scroll / (Mathf.Abs(scroll) >= 40f ? 120f : 1f);
+
+            while (_notch >= 1f) { _notch -= 1f; Step(+1); }
+            while (_notch <= -1f) { _notch += 1f; Step(-1); }
+        }
+
+        private float _notch;
+
+        /// <summary>True while the gunsmith is leaned in over this station.</summary>
+        private bool Leaning
+        {
+            get
+            {
+                if (_station == null) _station = GetComponentInParent<StationView>();
+                if (_station == null) return false;
+
+                if (_rig == null) _rig = FindAnyObjectByType<PlayerRig>();
+                return _rig != null && _rig.Focused == _station;
+            }
+        }
+
+        private StationView _station;
+        private PlayerRig _rig;
 
         private bool Pressed(Transform button)
             => button != null && Aim.IsUnderAim(Aiming, button.gameObject, Reach, Mouse.current);
@@ -184,9 +238,13 @@ namespace Gunsmith.Crafting
             Refresh();
         }
 
+        private int _turned;
+
         /// <summary>Changes the selected line.</summary>
         public void Step(int direction)
         {
+            _turned += direction;
+
             switch (_row)
             {
                 case Row.Base:
@@ -262,9 +320,12 @@ namespace Gunsmith.Crafting
                 ref _labelRest, ref _labelKnown, ref _valueRest, ref _valueKnown);
 
             BenchScreen.PlaceMark(RowButton);
-            BenchScreen.PlaceMark(LessButton);
-            BenchScreen.PlaceMark(MoreButton);
             BenchScreen.PlaceMark(RefineButton);
+
+            // The wheel shows how far it has been turned, so the dial is a thing that moves rather
+            // than an ornament beside a number.
+            if (Dial != null)
+                Dial.localRotation = Quaternion.Euler(_turned * DegreesPerStep, 0f, 90f);
         }
 
         /// <summary>The cursor down the left of the labels, showing which row the buttons work.</summary>
