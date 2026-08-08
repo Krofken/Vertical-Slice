@@ -130,6 +130,7 @@ namespace Gunsmith.Interaction
                     case ShopAction.FireOne: fixture.Used = FireOne; break;
                     case ShopAction.HandOverBatch: fixture.Used = DeliverBatch; break;
                     case ShopAction.TurnInForTheNight: fixture.Used = Advance; break;
+                    case ShopAction.TipThePan: fixture.Used = TipThePan; break;
 
                     case ShopAction.None:
                         // A station you lean over needs no action — leaning in is the
@@ -175,6 +176,21 @@ namespace Gunsmith.Interaction
             Debug.Log($"[Press] {(result.Success ? $"made {result.RoundsProduced} rounds" : result.Message)}");
 
             Refresh();
+        }
+
+        /// <summary>
+        /// Tips the powder pan back into the tin, so an overshoot can be started again.
+        ///
+        /// Charging is a pour and a poured grain cannot be taken back one at a time, so this
+        /// is the only route out of overfilling the pan. Empties completely rather than
+        /// removing a little: a scale is zeroed, not decremented.
+        /// </summary>
+        public void TipThePan()
+        {
+            var balance = Press != null ? Press.Balance : null;
+            if (balance == null) { Debug.Log("[Balance] no scale here."); return; }
+
+            balance.Empty();
         }
 
         /// <summary>Fires one round of the most recent load into a block.</summary>

@@ -74,8 +74,49 @@ namespace Gunsmith.Crafting
         /// case. The die allows it; it just cannot be a sane round.</summary>
         public bool IsBuried => _depth >= Projectile.OverallLength;
 
-        private void OnEnable() => Refresh();
+        private void OnEnable()
+        {
+            EnsureHandle();
+            Refresh();
+        }
+
         private void OnValidate() => Refresh();
+
+        /// <summary>
+        /// Makes sure the stop can actually be taken hold of.
+        ///
+        /// WHY THE DIE FITS ITS OWN HANDLE INSTEAD OF THE BUILDER DOING IT: the shop the
+        /// player walks around is a PREFAB INSTANCE, and <c>WorkshopBootstrap</c> adopts it
+        /// rather than rebuilding. So a fixture added to <c>WorkshopBuilder</c> reaches a
+        /// freshly-built shop and never reaches the authored one — the saved prefab is
+        /// frozen at whatever the builder looked like the day it was written, and the only
+        /// way to refresh it is to re-author the room, which throws away the hand-placed
+        /// layout the prefab exists to preserve.
+        ///
+        /// That is a trap worth naming: a PlayMode test that builds its own shop will pass
+        /// while the actual game stays broken, which is the same false green the canon
+        /// records for staged cameras. A component that fits its own missing parts works in
+        /// all three shops — code-built, prefab-restored, and hand-placed.
+        ///
+        /// RUNTIME ONLY. This is <c>[ExecuteAlways]</c>, and adding a component in edit mode
+        /// would dirty the scene — which turns every domain reload into a "save your
+        /// changes?" dialog and can reach a commit by accident. Nothing is serialised in
+        /// Play, so doing it here is free.
+        /// </summary>
+        private void EnsureHandle()
+        {
+            if (!Application.isPlaying) return;
+            if (Stop == null) return;
+            if (Stop.GetComponent<SeatingHandle>() != null) return;
+
+            // The stop needs something to be aimed at. The builder gives it a BoxCollider;
+            // a die assembled by hand might not have.
+            if (Stop.GetComponent<Collider>() == null) Stop.gameObject.AddComponent<BoxCollider>();
+
+            var handle = Stop.gameObject.AddComponent<SeatingHandle>();
+            handle.Die = this;
+            handle.Rig = Stop.parent;
+        }
 
         /// <summary>Screws the stop to a depth, in metres. Bound to a draggable
         /// handle so the depth is set by moving the tool.</summary>

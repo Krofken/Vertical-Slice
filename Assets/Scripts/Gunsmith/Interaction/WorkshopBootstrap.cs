@@ -183,6 +183,21 @@ namespace Gunsmith.Interaction
             interactor.Prompt = text;
             interactor.PromptBacking = plate.transform;
 
+            // THE LOUPE, carried rather than placed. It hangs off the head because the player is
+            // the one thing in this project that is always rebuilt at runtime — the shop is a
+            // frozen prefab the bootstrap adopts, so a glass left on the bench would never reach
+            // the authored room. Putting it on the gunsmith means every shop gets it.
+            //
+            // A pickup on the bench would be more diegetic and is worth doing once the prefab is
+            // re-authored; until then the key is the honest option rather than a tool that only
+            // exists in a shop nobody plays.
+            var loupe = new GameObject("Magnifying glass");
+            loupe.transform.SetParent(head, false);
+            loupe.transform.localPosition = Vector3.zero;
+            Disposable(loupe);
+
+            loupe.AddComponent<MagnifyingGlass>();
+
             return rig;
         }
 

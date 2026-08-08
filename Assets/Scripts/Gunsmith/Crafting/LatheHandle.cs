@@ -1,3 +1,4 @@
+using Gunsmith.Interaction;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -23,6 +24,13 @@ namespace Gunsmith.Crafting
     /// projecting onto a plane. A plane fails badly when you are looking down the axis;
     /// the nearest-point solution simply stops responding, which is the correct
     /// behaviour for a slide viewed end-on.
+    ///
+    /// AND IT STILL DID NOT DRAG, for a third reason that had nothing to do with either
+    /// of those: the station's own lean-in trigger box occluded every handle inside it,
+    /// so the grab ray never reached one. That trap and the measurement that found it are
+    /// documented on <see cref="Aim"/>, which is now the only thing deciding what is being
+    /// pointed at — shared with the seating die, so the same bug cannot be fixed here and
+    /// left standing there.
     /// </summary>
     [RequireComponent(typeof(Collider))]
     [AddComponentMenu("Gunsmith/Lathe Handle")]
@@ -62,10 +70,7 @@ namespace Gunsmith.Crafting
             var camera = Aiming;
             if (camera == null || Station == null || Station.Rig == null) return;
 
-            if (!Physics.Raycast(AimRay(camera, mouse), out var hit, Reach)) return;
-            if (hit.collider.gameObject != gameObject) return;
-
-            _dragging = true;
+            _dragging = Aim.IsUnderAim(camera, gameObject, Reach, mouse);
         }
 
         private void Drag(Mouse mouse)
@@ -78,7 +83,7 @@ namespace Gunsmith.Crafting
             Vector3 axisWorld = Station.Rig.TransformDirection(axisLocal).normalized;
             Vector3 origin = Station.Rig.position;
 
-            if (!ClosestPointOnLine(origin, axisWorld, AimRay(camera, mouse), out Vector3 point)) return;
+            if (!Aim.ClosestPointOnAxis(origin, axisWorld, Aim.Ray(camera, mouse), out Vector3 point)) return;
 
             // Distance along the axis, in rig-local metres. lossyScale undoes the display
             // scaling the rig applies so the projectile can be seen at all.
@@ -89,48 +94,6 @@ namespace Gunsmith.Crafting
 
             Station.Apply(Operation, along);
             Station.Rebuild();
-        }
-
-        /// <summary>
-        /// Where the player is aiming.
-        ///
-        /// With the cursor locked for mouse-look there IS no cursor position, so the aim
-        /// is the centre of the screen — you point with your head. Unlocked, it is the
-        /// pointer, so the bench still works from the editor with a free mouse.
-        /// </summary>
-        private static Ray AimRay(Camera camera, Mouse mouse)
-        {
-            if (Cursor.lockState == CursorLockMode.Locked)
-                return camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-
-            return camera.ScreenPointToRay(mouse.position.ReadValue());
-        }
-
-        /// <summary>
-        /// Point on the line (origin, direction) closest to the given ray.
-        ///
-        /// Standard closest-approach of two skew lines. Returns false when the ray and
-        /// the axis are near parallel, where the solution is unbounded — which happens
-        /// exactly when you are looking straight down the slide.
-        /// </summary>
-        private static bool ClosestPointOnLine(Vector3 origin, Vector3 direction, Ray ray, out Vector3 point)
-        {
-            Vector3 r = ray.direction.normalized;
-
-            float dr = Vector3.Dot(direction, r);
-            float denominator = 1f - dr * dr;
-
-            if (Mathf.Abs(denominator) < 1e-5f)
-            {
-                point = origin;
-                return false;
-            }
-
-            Vector3 between = ray.origin - origin;
-            float t = (Vector3.Dot(between, direction) - dr * Vector3.Dot(between, r)) / denominator;
-
-            point = origin + direction * t;
-            return true;
         }
     }
 }

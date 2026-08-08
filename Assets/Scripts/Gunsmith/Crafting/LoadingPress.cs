@@ -44,6 +44,35 @@ namespace Gunsmith.Crafting
         public TextMesh Readout;
 
         /// <summary>
+        /// What the last pull of the handle actually did, in the press's own words.
+        ///
+        /// THE HANDLE APPEARED TO DO NOTHING, and this is why. Pulling it ran the whole
+        /// chain correctly — compose, commit, bake, consume, put rounds on the shelf — and
+        /// then reported the outcome to <see cref="Debug.Log"/>, which a player standing in
+        /// the shop cannot see. The builder never assigned <see cref="Readout"/> either, and
+        /// the shop deliberately has no status board, so a successful batch and a failed one
+        /// looked identical: nothing happened.
+        ///
+        /// It is a CONSUMPTION report and nothing else. How many rounds came off the press
+        /// and what they ate is the definition of a consumption number and is what makes the
+        /// night's scarcity real. Not one word about how they will shoot.
+        /// </summary>
+        private string _lastPull;
+
+        /// <summary>
+        /// Makes sure there is somewhere to report before the handle is ever pulled.
+        ///
+        /// Not left to the first pull: a press with no visible readout looks like a press
+        /// that does nothing, which is precisely the complaint this is fixing. It should
+        /// read "press empty" while it is empty.
+        /// </summary>
+        private void Start()
+        {
+            if (Readout == null) Readout = FindReadout();
+            if (Readout != null && string.IsNullOrEmpty(Readout.text)) Readout.text = "press empty";
+        }
+
+        /// <summary>
         /// Gathers the four stations into one cartridge.
         ///
         /// Every field comes from a tool. Nothing is defaulted here that a station could
@@ -105,9 +134,22 @@ namespace Gunsmith.Crafting
         public CraftResult Press(GunsmithGame game, SavedDesign design)
         {
             if (game == null || design == null)
-                return new CraftResult { Message = "Nothing set up in the press." };
+            {
+                var nothing = new CraftResult { Message = "Nothing set up in the press." };
+                _lastPull = nothing.Message;
+                RefreshReadout(game, design);
+                return nothing;
+            }
 
             var result = game.Workshop.Craft(design, BatchSize);
+
+            // Say what came off the press, where the player can see it. On a refusal this
+            // is the assembly fault or the shortage — both facts about objects on the
+            // bench, which the bench is entitled to state.
+            _lastPull = result.Success
+                ? $"pulled: {result.RoundsProduced} rounds of {design.Name}"
+                : $"pulled: nothing. {result.Message}";
+
             RefreshReadout(game, design);
             return result;
         }
@@ -129,11 +171,12 @@ namespace Gunsmith.Crafting
         /// </summary>
         public void RefreshReadout(GunsmithGame game, SavedDesign design)
         {
+            if (Readout == null) Readout = FindReadout();
             if (Readout == null) return;
 
             if (game == null || design == null)
             {
-                Readout.text = "press empty";
+                Readout.text = string.IsNullOrEmpty(_lastPull) ? "press empty" : _lastPull;
                 return;
             }
 
@@ -153,9 +196,71 @@ namespace Gunsmith.Crafting
                     : $"{Units.KilogramsToGrains(line.Mass):F0} gr {line.DisplayName}\n");
             }
 
-            if (!bill.CanBuild) text.Append($"short of {bill.FirstShortage}");
+            if (!bill.CanBuild) text.Append($"short of {bill.FirstShortage}\n");
+
+            // Last, so the eye lands on it: what the handle just did.
+            if (!string.IsNullOrEmpty(_lastPull)) text.Append(_lastPull);
 
             Readout.text = text.ToString();
+        }
+
+        /// <summary>
+        /// Adopts the readout under the press, or makes one.
+        ///
+        /// The recurring shape in this project: a component must find its own parts rather
+        /// than trusting whoever built it. The press was handed every station it feeds off
+        /// and never a readout, so the one piece of feedback the player gets was null.
+        ///
+        /// ADOPTING IS NOT ENOUGH HERE, and that is the interesting part. The shop the player
+        /// walks around is a PREFAB INSTANCE that <c>WorkshopBootstrap</c> adopts rather than
+        /// rebuilds, so a label added to <c>WorkshopBuilder</c> appears in a freshly-built
+        /// shop and never in the authored one — there is nothing to adopt, because the prefab
+        /// was saved before the label existed. Re-authoring the room would fix it and would
+        /// also discard the hand-placed layout the prefab exists to preserve.
+        ///
+        /// So the press builds its own if it has none. RUNTIME ONLY: nothing is serialised in
+        /// Play, whereas creating an object in edit mode would dirty the scene and turn every
+        /// domain reload into a save prompt. Anything explicitly assigned still wins.
+        /// </summary>
+        private TextMesh FindReadout()
+        {
+            foreach (var candidate in GetComponentsInChildren<TextMesh>(includeInactive: true))
+                if (candidate.name == "Press readout") return candidate;
+
+            return Application.isPlaying ? BuildReadout() : null;
+        }
+
+        /// <summary>
+        /// Hangs a readout at the right-hand end of the bench, where the handle is.
+        ///
+        /// Character size is picked to be legible from standing rather than leaning in —
+        /// the press handle is pulled from where you stand, not from a lean-in pose, so this
+        /// is the one bench label read at full distance.
+        /// </summary>
+        private TextMesh BuildReadout()
+        {
+            var go = new GameObject("Press readout");
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = new Vector3(0.95f, 0.34f, -0.24f);
+
+            // NO ROTATION, and that is measured rather than assumed. A TextMesh is readable
+            // from its own -Z side: its glyphs are laid out towards +X and its forward
+            // vector points AWAY from whoever is reading it. The player stands on the -Z
+            // side of this bench, so an unrotated label already faces him correctly, and
+            // turning it to "face" the player would be what mirrors it.
+            //
+            // Rendered both ways to check, because the intuition is backwards: identical
+            // lit-pixel counts from either side (GUI/Text Shader does not cull), with the
+            // glyphs landing correctly only from -Z. Every other label the builder makes
+            // is unrotated for the same reason and they are all right.
+
+            var text = go.AddComponent<TextMesh>();
+            text.characterSize = 0.006f;
+            text.fontSize = 72;
+            text.color = new Color(0.95f, 0.93f, 0.88f);
+            text.anchor = TextAnchor.UpperCenter;
+            text.alignment = TextAlignment.Center;
+            return text;
         }
     }
 }

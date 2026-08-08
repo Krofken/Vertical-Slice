@@ -218,6 +218,16 @@ namespace Gunsmith.Interaction
             press.Balance = balance;
             press.Die = die;
             press.BatchSize = 20;
+
+            // THE ONE THING THE PRESS WAS NEVER GIVEN. Every station that feeds it was
+            // wired up and the press's own readout was left null, so pulling the handle
+            // consumed materials, put rounds on the shelf and told nobody. It sits beside
+            // the handle at the right-hand end of the bench, because that is where the
+            // player is standing when they pull it.
+            //
+            // Named, because LoadingPress adopts it by name when it was not handed one.
+            press.Readout = Label(bench.transform, "Press readout",
+                new Vector3(0.95f, 0.34f, -0.24f), 0.006f);
             return press;
         }
 
@@ -296,7 +306,29 @@ namespace Gunsmith.Interaction
                 new Vector3(0f, 0f, 0f), new Vector3(0.08f, 0.004f, 0.08f),
                 Mat(_palette?.Metal, Defaults.Metal));
 
-            mill.Readout = Label(go.transform, "Mill readout", new Vector3(0f, -0.028f, 0f), 0.0013f);
+            mill.Readout = Label(go.transform, "Mill readout", new Vector3(0f, 0.045f, 0f), 0.0013f);
+
+            // THE THREE THINGS THE MILL MAKES, each on something you can work. Before these
+            // the station was a readout with no inputs: SetWeb, SetDeterrent and NextShape were
+            // reachable only from the builder and the tests, so a player could look at a recipe
+            // and change nothing about it.
+            // Each slide gets a TRACK. The control places itself along it from the mill's
+            // current value, so where it sits always states what it is set to.
+            var grindTrack = new Vector3(-0.062f, 0.014f, 0.052f);
+            var wheel = Primitive(PrimitiveType.Sphere, go.transform, "Grinding wheel",
+                grindTrack, Vector3.one * 0.014f, Mat(_palette?.Metal, Defaults.Metal));
+            Control(wheel, mill, go.transform, MillAdjustment.Grind, grindTrack, travel: 0.124f);
+
+            var drumTrack = new Vector3(0.062f, 0.014f, -0.045f);
+            var drum = Primitive(PrimitiveType.Sphere, go.transform, "Coating drum",
+                drumTrack, Vector3.one * 0.014f, Mat(_palette?.Poise, Defaults.Poise));
+            Control(drum, mill, go.transform, MillAdjustment.Drum, drumTrack, travel: 0.090f);
+
+            var diePlate = new Vector3(0f, 0.014f, -0.058f);
+            var die = Primitive(PrimitiveType.Cube, go.transform, "Extrusion die",
+                diePlate, new Vector3(0.020f, 0.007f, 0.020f),
+                Mat(_palette?.Fixture, Defaults.Fixture));
+            Control(die, mill, go.transform, MillAdjustment.Die, diePlate, travel: 0f);
 
             mill.SetShape(GrainShape.Sphere);
             mill.SetWeb(3.5e-5);
@@ -304,10 +336,22 @@ namespace Gunsmith.Interaction
             return mill;
         }
 
+        private static void Control(
+            GameObject go, PropellantMill mill, Transform rig, MillAdjustment adjustment,
+            Vector3 trackStart, float travel)
+        {
+            var control = go.AddComponent<MillControl>();
+            control.Adjustment = adjustment;
+            control.Mill = mill;
+            control.Rig = rig;
+            control.TrackStart = trackStart;
+            control.Travel = travel;
+        }
+
         private PowderBalance BuildBalance(Transform parent)
         {
             var go = Empty(parent, "Powder balance", new Vector3(-0.30f, 0.02f, 0f), Vector3.one);
-            LeanIn(go, "weigh the charge", new Vector3(0.03f, 0.12f, -0.16f), fieldOfView: 26f);
+            LeanIn(go, "pour the charge", new Vector3(0.03f, 0.12f, -0.16f), fieldOfView: 26f);
 
             var balance = go.AddComponent<PowderBalance>();
             balance.BeamTravel = 0.30;
@@ -333,8 +377,15 @@ namespace Gunsmith.Interaction
 
             balance.BeamReadout = Label(go.transform, "Beam readout", new Vector3(0.06f, -0.012f, 0f), 0.0015f);
 
-            balance.SettingGrains = 5.5;
-            balance.Trickle(5.5);
+            // THE DISPENSER IS FITTED BY PowderBalance ITSELF, not here. It has to be, because the
+            // shop the player walks around is a frozen prefab this builder never runs for — so a
+            // machine built here would exist only in a freshly-built shop. Same reason the press
+            // fits its own readout and the die its own handle.
+
+            // The case starts EMPTY. It used to be handed 5.5 grains at construction, which is the
+            // reference charge, so every load began already correct and charging was something a
+            // player never had to do.
+            balance.Empty();
             return balance;
         }
 
@@ -366,6 +417,14 @@ namespace Gunsmith.Interaction
                 Vector3.zero, new Vector3(0.011f, 0.011f, 0.0012f),
                 Mat(_palette?.SeatingStop, Defaults.SeatingStop));
             die.Stop = stop.transform;
+
+            // MAKE IT GRABBABLE. The stop had a collider and a SetStop method and nothing
+            // that connected the two, so the die leaned you in over a tool you could not
+            // operate. The handle IS the stop rather than a bead beside it — you take hold
+            // of the thing itself, which is what you do to a real die body.
+            var seating = stop.AddComponent<SeatingHandle>();
+            seating.Die = die;
+            seating.Rig = rig;
 
             die.DepthReadout = Label(go.transform, "Die readout", new Vector3(0f, -0.022f, 0f), 0.0013f);
             die.Depth = 0.0030;
@@ -404,6 +463,15 @@ namespace Gunsmith.Interaction
             var firing = Primitive(PrimitiveType.Cube, parent, "Firing point",
                 new Vector3(3.4f, 0.55f, -0.4f), new Vector3(1.1f, 1.1f, 0.6f), fixtureMaterial);
             Use(firing, "fire one into the block", 2.4f, ShopAction.FireOne);
+
+            // Beside the balance, and deliberately NOT parented to it: a fixture inside a
+            // station's hierarchy is found by PlayerInteractor's GetComponentInParent
+            // <StationView>, so pressing E on it would both tip the pan and lean the player
+            // in or out of the station at the same time.
+            var bin = Primitive(PrimitiveType.Cylinder, parent, "Powder bin",
+                new Vector3(-0.46f, 0.98f, 0.70f), new Vector3(0.09f, 0.06f, 0.09f),
+                fixtureMaterial);
+            Use(bin, "tip the pan back into the tin", 2.2f, ShopAction.TipThePan);
 
             var cot = Primitive(PrimitiveType.Cube, parent, "Cot",
                 new Vector3(-4.3f, 0.28f, -0.6f), new Vector3(0.9f, 0.55f, 2.0f), fixtureMaterial);

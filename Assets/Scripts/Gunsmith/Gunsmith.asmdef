@@ -4,7 +4,16 @@
     "references": [
         "Krofken.Ballistics",
         "Krofken.Ballistics.Unity",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.Entities",
+        "Unity.Transforms",
+        "Unity.Entities.Graphics",
+        "Unity.Physics",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "Unity.Mathematics.Extensions",
+        "Unity.Burst",
+        "Unity.RenderPipelines.Core.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

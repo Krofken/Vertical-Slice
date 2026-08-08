@@ -60,11 +60,41 @@ namespace Gunsmith.Crafting
         public double MaximumWeb = 5.0e-4;
 
         [Header("Parts")]
-        [Tooltip("Sample of the finished grains. Rebuilt whenever the recipe changes.")]
+        [Tooltip("Sample of the finished powder. Rebuilt whenever the recipe changes.")]
         public Transform GrainTray;
 
-        [Tooltip("Grains to show in the tray. Presentation only.")]
-        [Range(4, 64)] public int SampleGrains = 24;
+        [Tooltip("Widest the pile may spread in the pan, metres. A ceiling, not the size — " +
+                 "the pile's actual footprint is derived from the granules in it.")]
+        public float HeapDiameter = 0.05f;
+
+        // ---- How the powder is DRAWN -------------------------------------
+        //
+        // A FLAT EXAGGERATION FACTOR DOES NOT WORK, and this is what made the pan go strange
+        // as the wheel was turned. Multiplying the web by a constant 14 spans the web's own
+        // 25:1 range, so the coarse end came out as 14 mm boulders while the fine end pinned
+        // against the granule cap and stopped changing at all — no visible difference across
+        // the whole useful pistol range, then a collapse to six lumps.
+        //
+        // So the drawn granule is mapped LOGARITHMICALLY into a band of sizes real powder
+        // actually comes in, and the count follows from conserving the sample's volume. Both
+        // stay monotonic in the web, which is the only thing the player has to be able to
+        // read: coarser is always bigger and always fewer.
+
+        [Tooltip("The pinch of powder in the pan, cubic metres. CONSTANT — grinding rearranges " +
+                 "this volume into more, smaller pieces and never creates or destroys any of it.")]
+        public float PowderVolume = 3.0e-7f;
+
+        [Tooltip("Granules drawn for the FINEST powder the mill can press.")]
+        [Range(200, 4000)] public int MaxGrains = 2400;
+
+        [Tooltip("Granules drawn for the COARSEST powder. The ratio between this and MaxGrains " +
+                 "is what fixes the size range: conserving volume means the diameter can only " +
+                 "change by the cube root of the change in count.")]
+        [Range(20, 1000)] public int MinGrains = 200;
+
+        [Tooltip("How loosely the pile sits, as a multiple of the ideal packed radius. Above 1 " +
+                 "the pile is looser than solid-packed, which is what powder actually does.")]
+        [Range(1f, 2.5f)] public float PileSpread = 1.35f;
 
         public Material GrainMaterial;
 
@@ -83,6 +113,37 @@ namespace Gunsmith.Crafting
         {
             get => _deterrentCoating;
             set { _deterrentCoating = Clamp(value, 0.0, 1.0); Refresh(); }
+        }
+
+        [Tooltip("Most times a batch can go through the coating drum. Only how the coat is " +
+                 "COUNTED for the player — the deterrent itself stays continuous, because that " +
+                 "is what the burn model reads.")]
+        [Range(2, 12)] public int DrumPasses = 6;
+
+        /// <summary>
+        /// The coat, counted in trips through the drum.
+        ///
+        /// THE DRUM IS NOT A SWITCH, though its readout used to make it look like one. It printed
+        /// "coated" above a threshold of 0.005 and "uncoated" below, which collapsed a continuous
+        /// value into two words — so dragging it felt like operating a control with two positions
+        /// and no reason to be a drag at all. The value itself was never binary:
+        /// <see cref="DeterrentCoating"/> runs 0 to 1 and feeds the burn model, where it decides
+        /// how far the outside of a granule lags its core and therefore how progressively the
+        /// charge burns. Making the control a switch would have thrown that away.
+        ///
+        /// Passes are how a real batch is coated — you run it through again — so counting them is
+        /// a dimension of the work rather than a prediction about it, which is the line the canon
+        /// draws. Still nothing here about how it will shoot.
+        /// </summary>
+        public string Coating
+        {
+            get
+            {
+                int passes = (int)System.Math.Round(_deterrentCoating * DrumPasses);
+
+                if (passes <= 0) return "uncoated";
+                return passes == 1 ? "1 pass in the drum" : $"{passes} passes in the drum";
+            }
         }
 
         /// <summary>Web in millimetres — a dimension of the grain, like a calliper
@@ -128,7 +189,60 @@ namespace Gunsmith.Crafting
 
         private bool _trayDirty;
 
-        private void OnEnable() => Refresh();
+        private void OnEnable()
+        {
+            EnsureControls();
+            Refresh();
+        }
+
+        /// <summary>
+        /// Fits the mill's three controls if it has none.
+        ///
+        /// The authored shop is a frozen prefab that <c>WorkshopBootstrap</c> adopts rather
+        /// than rebuilds, so controls added to <c>WorkshopBuilder</c> would only ever appear in
+        /// a freshly-built shop and never in the game the player opens. Same repair as the
+        /// press's readout, the die's handle and the powder tin.
+        ///
+        /// RUNTIME ONLY — this is <c>[ExecuteAlways]</c>, and creating objects in edit mode
+        /// dirties the scene, which turns every domain reload into a save prompt.
+        /// </summary>
+        private void EnsureControls()
+        {
+            if (!Application.isPlaying) return;
+            if (GetComponentInChildren<MillControl>(true) != null) return;
+
+            // Tracks run clear of the pan so a control is never buried in the powder, and
+            // wide enough that the whole range is a comfortable sweep rather than a twitch.
+            Fit(MillAdjustment.Grind, "Grinding wheel",
+                new Vector3(-0.062f, 0.014f, 0.052f), Vector3.one * 0.014f, travel: 0.124f);
+
+            Fit(MillAdjustment.Drum, "Coating drum",
+                new Vector3(0.062f, 0.014f, -0.045f), Vector3.one * 0.014f, travel: 0.090f);
+
+            Fit(MillAdjustment.Die, "Extrusion die",
+                new Vector3(0f, 0.014f, -0.058f), new Vector3(0.020f, 0.007f, 0.020f), travel: 0f);
+        }
+
+        private void Fit(MillAdjustment adjustment, string name, Vector3 position, Vector3 scale,
+            float travel)
+        {
+            var go = GameObject.CreatePrimitive(
+                adjustment == MillAdjustment.Die ? PrimitiveType.Cube : PrimitiveType.Sphere);
+
+            go.name = name;
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = position;
+            go.transform.localScale = scale;
+
+            if (GrainMaterial != null) go.GetComponent<MeshRenderer>().sharedMaterial = GrainMaterial;
+
+            var control = go.AddComponent<MillControl>();
+            control.Adjustment = adjustment;
+            control.Mill = this;
+            control.Rig = transform;
+            control.TrackStart = position;
+            control.Travel = travel;
+        }
 
         /// <summary>
         /// Unity forbids DestroyImmediate inside OnValidate, so the tray cannot be torn
@@ -216,79 +330,267 @@ namespace Gunsmith.Crafting
                     : BaseId;
 
                 Readout.text =
-                    $"{name}\n{Shape}\n{WebMillimetres:F3} mm grain\n{BurnCharacter}" +
-                    (_deterrentCoating > 0.005 ? "\ncoated" : "\nuncoated");
+                    $"{name}\n{Shape}\n{WebMillimetres:F3} mm grain\n{BurnCharacter}\n{Coating}";
             }
         }
 
         /// <summary>
-        /// Lays a sample of the milled grains out in the tray at their true size, so a
-        /// coarse powder visibly IS coarse. The grains are the readout.
+        /// Lays the milled powder out in the pan as individual granules.
+        ///
+        /// ONE OBJECT PER GRAIN, and the COUNT is what carries the reading. The sample's
+        /// volume is held constant, so grinding coarser does not merely inflate each granule —
+        /// it produces FEWER of them, because the same pan of powder is now made of bigger
+        /// pieces. Count falls as the cube of the diameter. That is the comparison the player
+        /// is meant to see, it is physically honest, and it is legible at a glance in a way
+        /// that neither two dozen scattered dots nor a textured dome ever was.
+        ///
+        /// POOLED, NOT REBUILT. The web changes every frame while the grinding wheel is being
+        /// dragged, and creating several hundred GameObjects per frame would stall the drag —
+        /// which is exactly why the controls appeared to move only after the mouse stopped.
+        /// The granules are created once, up to MaxGrains, then only rescaled and shown or
+        /// hidden. Rescaling a few hundred transforms per frame costs nothing.
+        ///
+        /// Presentation only, as the canon requires: nothing here touches a solver, and the
+        /// sample is a fixed volume because the mill designs a RECIPE, not an amount. How much
+        /// powder you use is the balance's business.
         /// </summary>
         private void RebuildTray()
         {
             if (GrainTray == null) return;
 
-            for (int i = GrainTray.childCount - 1; i >= 0; i--)
+            // The tray is scaled up, so sizes have to be divided back out to land on the real
+            // millimetres wanted in the pan.
+            float tray = Mathf.Abs(GrainTray.lossyScale.x);
+            if (tray < 1e-6f) tray = 1f;
+
+            // COUNT comes from the web; SIZE comes from conserving the volume. That order is the
+            // whole fix. Doing it the other way round — size from the web, count from volume —
+            // needs a floor on the count to stop a coarse powder collapsing to a few lumps, and
+            // that floor is exactly what inflated the pile to thirteen times its volume at the
+            // coarse end. Derive count first and there is nothing left to clamp.
+            int wanted = GrainCount;
+            double apparent = DrawnGrainDiameter;
+
+            float size = (float)(apparent / tray);
+
+            // Constant, because the volume is constant. A pile of the same powder ground finer
+            // occupies the same room — that is the point, and it is why this no longer depends on
+            // the granule size at all.
+            float radius = PileRadius / tray;
+
+            EnsureGrains(wanted);
+
+            for (int i = 0; i < _grains.Count; i++)
             {
-                var child = GrainTray.GetChild(i).gameObject;
-                if (Application.isPlaying) Destroy(child); else DestroyImmediate(child);
+                var grain = _grains[i];
+                if (grain == null) continue;
+
+                bool shown = i < wanted;
+                if (grain.gameObject.activeSelf != shown) grain.gameObject.SetActive(shown);
+                if (!shown) continue;
+
+                grain.localPosition = HeapPosition(i, radius, size);
+                grain.localRotation = Quaternion.Euler(0f, Hash01(i, 91) * 360f, Hash01(i, 57) * 360f);
+                grain.localScale = ScaleForShape(size);
             }
+        }
 
-            // The web is a half-thickness for a flake and a radius for a sphere or cord,
-            // so the visible grain is about twice the web across in its smallest
-            // dimension. Good enough that coarse looks coarse.
-            float size = (float)(_webThickness * 2.0);
-            float spread = size * 6f;
+        /// <summary>
+        /// How far along the mill's range the web currently sits, 0 (finest) to 1 (coarsest).
+        ///
+        /// Logarithmic because the range is 25:1 and burn time goes with the web
+        /// proportionally, so equal fractions of the wheel's travel should be equal
+        /// proportional changes rather than equal absolute ones.
+        /// </summary>
+        private double Coarseness
+        {
+            get
+            {
+                double min = System.Math.Log(MinimumWeb);
+                double max = System.Math.Log(MaximumWeb);
+                if (max - min < 1e-12) return 0.0;
 
-            for (int i = 0; i < SampleGrains; i++)
+                double t = (System.Math.Log(_webThickness) - min) / (max - min);
+                return t < 0.0 ? 0.0 : (t > 1.0 ? 1.0 : t);
+            }
+        }
+
+        /// <summary>
+        /// How many granules the pinch is broken into. Many when fine, few when coarse.
+        /// </summary>
+        public int GrainCount
+        {
+            get
+            {
+                // Geometric, so the count falls smoothly rather than in a rush at one end.
+                double many = System.Math.Log(System.Math.Max(1, MaxGrains));
+                double few = System.Math.Log(System.Math.Max(1, MinGrains));
+
+                return (int)System.Math.Round(System.Math.Exp(many + (few - many) * Coarseness));
+            }
+        }
+
+        /// <summary>
+        /// Diameter a granule is drawn at, metres — WHATEVER SIZE CONSERVES THE VOLUME.
+        ///
+        /// This is the piece that makes grinding look like grinding. The pinch of powder is a
+        /// fixed volume; breaking it into N pieces makes each piece the cube root of 1/N of it.
+        /// Grind a one-centimetre rock into dust and the dust, swept back together, is still a
+        /// cubic centimetre — nothing is created and nothing destroyed, only rearranged. So the
+        /// diameter is not a free parameter and is never chosen: it falls out of the count.
+        ///
+        /// The consequence, which is the tell that it is right: the PILE NEVER CHANGES SIZE. Only
+        /// its granularity does. Before this, size was mapped from the web independently and the
+        /// count was clamped to a floor, so at the coarse end the same pinch of powder silently
+        /// became thirteen times as much of it and the whole heap swelled.
+        /// </summary>
+        public double DrawnGrainDiameter
+        {
+            get
+            {
+                int count = System.Math.Max(1, GrainCount);
+
+                // Sphere of equal volume: V_each = V_total / N, and V_each = (pi/6) d^3.
+                double each = PowderVolume / count;
+                return System.Math.Pow(each * 6.0 / System.Math.PI, 1.0 / 3.0);
+            }
+        }
+
+        /// <summary>
+        /// Radius the pile spreads to, metres. Constant, because the volume is.
+        ///
+        /// Solved from the volume rather than from the granules: a pile roughly as tall as half
+        /// its radius, loosened by the shape's own packing fraction, since flakes bridge and trap
+        /// air where spheres tumble into a dense bed. Capped at the pan so a bulky powder cannot
+        /// spill over the rim.
+        /// </summary>
+        public float PileRadius
+        {
+            get
+            {
+                // V = pi r^2 h * packing, with h = r / 2.
+                double packed = System.Math.Max(0.05, PackingFraction);
+                double solved = System.Math.Pow(
+                    PowderVolume / (System.Math.PI * 0.5 * packed), 1.0 / 3.0);
+
+                return Mathf.Min((float)solved * PileSpread, HeapDiameter * 0.5f);
+            }
+        }
+
+        private readonly System.Collections.Generic.List<Transform> _grains =
+            new System.Collections.Generic.List<Transform>();
+
+        private GrainShape _pooledShape;
+
+        /// <summary>Makes granules up to the count needed, reusing any that already exist.</summary>
+        private void EnsureGrains(int wanted)
+        {
+            // A die change alters the primitive, so the pool has to go — but only then, never
+            // on a mere size change, which is the common case while dragging.
+            if (_grains.Count > 0 && _pooledShape != Shape) Discard();
+            _pooledShape = Shape;
+
+            for (int i = _grains.Count - 1; i >= 0; i--)
+                if (_grains[i] == null) _grains.RemoveAt(i);
+
+            while (_grains.Count < wanted)
             {
                 var grain = GameObject.CreatePrimitive(PrimitiveForShape());
-                grain.name = $"Grain {i + 1}";
+                grain.name = "Grain " + (_grains.Count + 1);
                 grain.transform.SetParent(GrainTray, false);
                 grain.hideFlags = HideFlags.DontSave;
 
-                // NO COLLIDER. These are a magnified picture of the powder and nothing
-                // ever touches them — but CreatePrimitive fits one by default, and a
-                // couple of dozen colliders sitting in the middle of the bench at ~400x
-                // scale is something the player spawns inside. The character controller
-                // then depenetrates itself and is flung two hundred metres across the
-                // map, which is exactly what happened.
+                // NO COLLIDER. Nothing ever touches these, and a few hundred colliders in the
+                // middle of the bench is something the character controller depenetrates itself
+                // out of — which once flung the player two hundred metres across the map.
                 var solid = grain.GetComponent<Collider>();
                 if (solid != null)
                 {
                     if (Application.isPlaying) Destroy(solid); else DestroyImmediate(solid);
                 }
 
-                // Deterministic golden-angle spiral. No random placement anywhere in
-                // this game: the same recipe must always look the same.
-                float angle = i * 2.399963f;
-                float radius = spread * Mathf.Sqrt(i + 1) * 0.35f;
-                grain.transform.localPosition =
-                    new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-                grain.transform.localRotation = Quaternion.Euler(0f, angle * Mathf.Rad2Deg, 0f);
-                grain.transform.localScale = ScaleForShape(size);
-
                 if (GrainMaterial != null)
-                    grain.GetComponent<MeshRenderer>().sharedMaterial = GrainMaterial;
+                {
+                    var renderer = grain.GetComponent<MeshRenderer>();
+                    renderer.sharedMaterial = GrainMaterial;
+
+                    // GPU instancing, so several hundred granules cost a handful of draw calls
+                    // rather than several hundred.
+                    GrainMaterial.enableInstancing = true;
+                }
+
+                _grains.Add(grain.transform);
             }
+        }
+
+        private void Discard()
+        {
+            for (int i = 0; i < _grains.Count; i++)
+            {
+                if (_grains[i] == null) continue;
+
+                var go = _grains[i].gameObject;
+                if (Application.isPlaying) Destroy(go); else DestroyImmediate(go);
+            }
+
+            _grains.Clear();
+        }
+
+        /// <summary>
+        /// Where one granule sits in the mound.
+        ///
+        /// Deterministic, from an integer hash rather than Random: the same recipe must always
+        /// look identical, which is the rule the rest of this project's presentation follows.
+        /// Height is biased towards the base and the radius narrows towards the top, which is
+        /// what makes it read as a poured pile rather than a slab.
+        /// </summary>
+        private static Vector3 HeapPosition(int index, float radius, float size)
+        {
+            float t = Hash01(index, 13);
+            float height = t * t;
+
+            float available = radius * (1f - height * 0.85f);
+
+            // Golden-angle sweep with a hashed radius, so successive granules never line up
+            // into visible spokes.
+            float angle = index * 2.399963f;
+            float r = available * Mathf.Sqrt(Hash01(index, 71));
+
+            return new Vector3(
+                Mathf.Cos(angle) * r,
+                height * radius * 0.5f + size * 0.5f,
+                Mathf.Sin(angle) * r);
+        }
+
+        /// <summary>Repeatable value in [0,1) from an index and a salt. No seed to lose.</summary>
+        private static float Hash01(int index, int salt)
+        {
+            int h = index * 374761393 + salt * 668265263;
+            h = (h ^ (h >> 13)) * 1274126177;
+            h ^= h >> 16;
+            return (h & 0xFFFFFF) / 16777216f;
         }
 
         private PrimitiveType PrimitiveForShape()
             => Shape == GrainShape.Sphere ? PrimitiveType.Sphere : PrimitiveType.Cylinder;
 
+        /// <summary>
+        /// The granule's proportions, so the die you fitted is visible in the pan.
+        ///
+        /// A flake really is a thin disc and a cord really is an extruded length, and those are
+        /// the shapes that decide whether the burning surface shrinks, holds or grows as the
+        /// charge is consumed. Seeing them is the only way the die choice is legible at all.
+        /// </summary>
         private Vector3 ScaleForShape(float size)
         {
             switch (Shape)
             {
-                // A flake is a thin disc: wide across, barely anything through.
-                case GrainShape.Flake: return new Vector3(size * 3f, size * 0.15f, size * 3f);
+                case GrainShape.Flake: return new Vector3(size * 2.6f, size * 0.22f, size * 2.6f);
 
-                // Cords and tubes are extruded lengths, several diameters long.
                 case GrainShape.Cord:
                 case GrainShape.SinglePerforated:
                 case GrainShape.SevenPerforated:
-                    return new Vector3(size, size * 2.5f, size);
+                    return new Vector3(size * 0.8f, size * 2.2f, size * 0.8f);
 
                 default: return Vector3.one * size;
             }

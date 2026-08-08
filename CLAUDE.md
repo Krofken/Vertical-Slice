@@ -300,8 +300,9 @@ Until then the case stays a `CartridgeCaseLibrary` pick (9 mm only, and that sta
 the primer stays a counted consumable in `WorkshopInventory` with no design surface.
 **Do not quietly design around this as though it were cut.** It is deferred.
 
-**The scene is the user's to build by hand.** No scene, no UI, no prefabs. Test scenes
-are fine; the vertical slice scene is not to be authored by an agent.
+**~~The scene is the user's to build by hand.~~ REVOKED 2026-08-08.** Building, laying out
+and art-directing the scene is the agent's job now. See the rule at the top of
+**Verification practice**.
 
 ---
 
@@ -409,9 +410,49 @@ unstable, and ruinously expensive.
 
 ## Verification practice
 
-All three suites stay green: **199/199 EditMode and 8/8 PlayMode in Unity, 70/70
+### THE RULE, set 2026-08-08 after two sessions of getting this wrong
+
+**Do not run the EditMode suite. Do not write code-level unit tests. If it compiles, that is
+enough correctness checking.** Every test from here is a GAMEPLAY test: can a person at a
+mouse actually do the thing.
+
+This replaces the practice described below, which stays only as a record of how the physics
+was originally validated. The suites are not to be used as evidence that anything works.
+
+**Why, in the user's words:** players do not care if you have the best code in the world if
+they cannot play something that represents that code. Twice now an agent reported "199/199
+EditMode, 22/22 PlayMode, all green" while the game was unplayable — lean-in camera angles
+pointing at nothing, stations that could not be operated, powder grains rendered absurdly
+large. The tests asserted that a raycast reached a collider and that objects existed. Nothing
+asserted that the game was playable, so nothing caught that it wasn't.
+
+**The failure mode to watch for in yourself:** substituting what is cheap to measure (a
+raycast hit, an existence check, a suite total) for what was asked (look at the screen and
+judge it). Measuring produces a number and feels like progress. Looking requires entering the
+game and forming an opinion. Do the second one.
+
+**So verification means:** press Play, stand where the player stands, walk to the station,
+lean in, and LOOK — through the player's own camera, never a staged one. Screenshot it. Judge
+it by eye. A geometric probe from a computed eye position is not a player, and a green number
+is not evidence.
+
+**The scene is now the agent's to build.** The old rule that the vertical slice scene is the
+user's to author by hand is REVOKED as of 2026-08-08 — building, laying out and
+art-directing the scene is part of the job.
+
+### How the physics was originally validated (historical)
+
+All three suites stay green: **199/199 EditMode and 17/17 PlayMode in Unity, 70/70
 outside** via `dotnet test`. The outside-Unity run is what proves the core is still
 portable to the other project — if it breaks, a Unity dependency leaked into the core.
+
+PlayMode went 8 → 17 on 2026-08-08 with `Tests/Runtime/WorkingTheBenchPlayTests`, which
+asserts the bench RESPONDS rather than merely existing: that a leaned-in aim ray reaches a
+lathe handle, that the station's trigger box no longer shields it, that the die has something
+to take hold of, that the shop has a yard, that pulling the handle says what it did, and that
+the press never leaks a performance word. `StandingUpPlayTests` proved the gunsmith stands up
+in a room; nothing had checked he could operate anything in it. Read the caveat in **The
+prefab is frozen** above before trusting any of them about the authored shop.
 
 **Re-measure these numbers when you touch them; do not copy them forward.** They were
 stale by seventy tests once already, in a file that warns three paragraphs below about
@@ -675,21 +716,87 @@ Written down 2026-08-08 after actually playing it. Everything below was seen on
 screen, not inferred. **Do these before anything else, and verify each by looking at
 the running game rather than by measuring the thing you just changed.**
 
-1. **Powder charging is the wrong interaction entirely.** Replace the beam-and-poise
-   abstraction with a physical pour: hold a container over the case, tilt it, powder
-   flows in, stop when you like. The reference the user gave is Schedule I's
-   watering-can. The charge mass is already simulated and tested — this is an INPUT
-   METHOD over `CartridgeDesign.ChargeMass`, not new physics. Coarse pour then fine
-   trickle, because pure pour-until-you-stop cannot hit 5.5 grains.
+1. **Powder charging is the wrong interaction entirely. BUILT 2026-08-08 — needs a human
+   at the mouse to judge the feel.** `PowderMeasure` is the tin: aim at it, hold the left
+   button, and pull the mouse back to tip it. Powder falls into the pan and the scale counts
+   up. Release to right it; right-click while holding tips the pan back out.
 
-2. **`LatheStation` handles do not drag.** "Turn the bullet" leans in and then nothing
-   responds. `LatheHandle` reads `Mouse.current` and builds an aim ray, and the cursor
-   is released on focus — find out which half is failing.
+   **And the beam-and-poise was not merely the wrong interaction — it was no interaction at
+   all.** `SlidePoise` and `Trickle` were called only from the test assembly and from the
+   builders, which poured a fixed 5.5 grains at construction. So the charge weight, the most
+   consequential number on the bench, **could not be changed by playing the game**, and
+   every load started already at the reference charge. Third station found in that state,
+   after the seating die and the press readout.
 
-3. **`SeatingStop` does not respond either.** Same symptom, probably the same cause.
+   **One control gives both rates, and that is the whole trick.** Flow goes as the cube of
+   how far the tin is tipped:
 
-4. **The press handle produces nothing.** "Pull the press handle" appears to do
-   nothing; the batch never arrives.
+   | tip | flow | to fill 5.5 gr |
+   |---|---|---|
+   | full over | 9.0 gr/s | 0.6 s — the coarse pour |
+   | a third | 0.18 gr/s | a tenth of a grain takes half a second |
+
+   Fifty to one from one continuous motion, so the player slams it over and then feathers
+   it, which is how the real job is done. A linear pour cannot land a charge — by the time
+   you react you are a grain over — and that is why the canon asked for coarse-then-fine.
+   `PourThreshold` means a tin resting over the pan does not dribble.
+
+   The scale's readout now shows **what is in the pan**, not what a poise was set to. With a
+   pour there is no target, so the setting was a number about nothing. Still a consumption
+   figure, which is the sanctioned kind.
+
+   Not new physics, exactly as the canon said: this writes `PowderBalance.PouredGrains`,
+   which is what `ApplyTo` has always turned into `CartridgeDesign.ChargeMass`.
+
+   **What is verified and what is not.** Verified: the tin exists in the authored shop, is
+   the first thing the aim ray reaches from the lean-in eye at 13.5 cm, the pan starts empty,
+   the flow curve has the range above, poured grains reach the design unchanged, and the pan
+   can be tipped back. **Not verified: whether `TiltSensitivity` (0.004 per pixel) feels
+   right**, because mouse input cannot be synthesised over the MCP bridge. Sit down and pour
+   a few charges; if it is twitchy or sluggish that one field is the dial.
+
+2. **`LatheStation` handles do not drag. FIXED 2026-08-08.** Neither candidate cause was
+   it — `Mouse.current` was fine and `Camera.main` correctly resolved to the player's head.
+   The cause was a third thing, and it was measured in the running shop rather than
+   reasoned about: **`WorkshopBuilder.LeanIn` wraps every station in a 17 cm `BoxCollider`
+   marked `isTrigger`, and `Physics.queriesHitTriggers` defaults to true**, so the grab ray
+   stopped on the station's own box at 6 cm and never reached the handles 11 cm further in:
+
+   ```
+   [0] d=0.062  Core bench    trigger=True    <- the ray stopped here
+   [1] d=0.169  Cavity mouth  trigger=False
+   [2] d=0.170  Meplat        trigger=False
+   ```
+
+   Every handle asked "did the ray hit ME", the answer was always no, and nothing was
+   dragged. **A trigger in this shop means "you may walk up to this", never "this is
+   solid", and must never occlude the work it surrounds.** The grab ray now ignores
+   triggers, which also gets the nearest solid hit in one allocation-free raycast. It lives
+   in `Aim` (`Interaction/Aim.cs`) and is shared with the die, so the bug cannot be fixed in
+   one tool and left standing in the other.
+
+   Secondary, still open: at true 9 mm scale the meplat and cavity-mouth beads sit about
+   1.2 mm apart with 2.5 mm spheres, so those two interpenetrate and are hard to tell
+   apart. `AxisOf` spreads the handles for exactly this reason and it is not enough at the
+   tip.
+
+3. **`SeatingStop` does not respond either. FIXED 2026-08-08 — and it was NOT the same
+   cause.** The lathe's handles existed and were occluded; **the die's handle did not
+   exist at all.** `SetStop` documented itself as "bound to a draggable handle" and nothing
+   outside the test assembly had ever called it. Now `SeatingHandle`, on the stop itself,
+   because you take hold of a real die body rather than a bead beside it.
+
+   Two causes, one symptom. Treating them as one bug would have fixed half and left the
+   other half looking fixed.
+
+4. **The press handle produces nothing. FIXED 2026-08-08.** It in fact produced rounds
+   correctly every time — composed, committed, baked, consumed stock, put 20 rounds on the
+   shelf — and reported it to `Debug.Log`, which a player standing in the shop cannot see.
+   `BuildBench` wired every station that feeds the press and never assigned
+   `LoadingPress.Readout`, and the shop deliberately has no status board, so success and
+   failure looked identical: nothing happened. The press now reports what the pull did,
+   beside the handle, and reads "press empty" before the first one. Consumption only — a
+   test asserts the readout never leaks a performance word.
 
 5. **The lean-in poses are wrong.** `StationView.EyeOffset` values were picked by
    arithmetic, never by eye. The powder balance shows the beam edge-on with the pan
@@ -709,6 +816,36 @@ the running game rather than by measuring the thing you just changed.**
    Finer is not better. Finer bursts the case; coarser throws unburnt powder out of
    the muzzle as flash. None of that is visible at the station.
 
+   **Still open as of 2026-08-08.** Note before starting: the mill is not merely unreadable,
+   **none of its controls can be operated by playing at all.** `SetWeb`, `SetDeterrent` and
+   `NextShape` are called only from the builders and the test assembly. Making it readable
+   and making it reachable are the same job. `Aim` and the drag handles are there to build
+   on now.
+
+### The pattern behind items 1, 3 and 6: tools with no hand attached
+
+Found while fixing the above, and it is the largest single thing wrong with the bench. **A
+station having a documented, tested API does not mean a player can touch it.** Every one of
+these was called only from the builders — which set a value once at construction — and from
+the test assembly:
+
+| Control | Sets | Reachable by playing? |
+|---|---|---|
+| `PowderBalance.SlidePoise` / `Trickle` | the charge | **was no** — now poured, see 1 |
+| `SeatingStop.SetStop` | seating depth | **was no** — now `SeatingHandle`, see 3 |
+| `PropellantMill.SetWeb` / `SetDeterrent` / `NextShape` | burn rate | **still no** |
+| `LatheStation.NextCoreMaterial` / `NextJacketMaterial` / `NextCavityFill` | the stock in the chuck | **still no** |
+
+So the canon's "the stock is chucked, not chosen from a menu" is presently neither — there
+is no way to change stock while playing. Of the ten things the sim reads, only the nine lathe
+dimensions and now the charge can actually be set by a person in the shop.
+
+This is why the EditMode suite stayed green through all of it: it drives the API, and the
+API was always correct. **Test through the input path, or the test proves the wrong half.**
+
+**Where the list stands:** items 1 to 4 are fixed and verified in the running shop. What is
+left is the lean-in poses (5), the mill (6), and the two unreachable control sets above.
+
 ### The bug shape that keeps recurring
 
 **A component must find its own parts. Do not trust whoever built it.**
@@ -724,6 +861,74 @@ This has now caused four separate failures, each silent:
 The fix is the same every time: resolve lazily, adopt what is already in the
 hierarchy, and leave anything explicitly assigned alone. **Check the remaining
 construction-time wiring for the same shape before it bites a fifth time.**
+
+#### The fifth one was found, and it was not a wiring bug at all
+
+Hunted 2026-08-08 as instructed, and the answer reframes the fourth entry above.
+`WorkshopController.Yard` being null is recorded there as fixed by resolving lazily. **It
+was still broken**, and lazy resolution could never have fixed it, because there was
+nothing left in the hierarchy to adopt:
+
+**One MonoBehaviour per file, named after it. Unity resolves a script reference BY FILE
+NAME.** A behaviour sharing a file with another class cannot be serialised at all — the
+editor writes `m_Script: {fileID: 0}` and it comes back as "the referenced script on this
+Behaviour is missing", with every serialised field still intact beside a dead pointer.
+
+`RangeStation` lived at the bottom of `EvidenceRack.cs`. So the authored shop's yard had
+its `Range`, `MediumId`, `BlockThickness` and `Rack` all sitting correctly in
+`Workshop Shop.prefab` next to a null script, `AdoptStations` found no `RangeStation`, and
+**firing answered "no yard" forever in the game the user actually plays.** Three
+"missing script on 'Shop'" warnings had been in the console the whole time.
+
+`PlayerInteractor` had the same defect inside `Interactable.cs` and had not bitten yet
+purely by luck: the player rig is rebuilt at runtime and deliberately never parented to the
+bootstrap, so nothing had tried to save it. Prefabbing the player — an obvious next step for
+art-directing him — would have made every interaction in the shop go dead with no error.
+
+Both are now in their own files. The already-saved prefab needed a separate one-line repair
+to its dead pointer, done surgically rather than by re-authoring the room, because
+re-authoring would discard the hand-placed layout the prefab exists to preserve.
+
+**This failure is silent, survives a fully green test suite, and only appears once
+something is saved.** Grep for `class \w+ : MonoBehaviour` and check each against its file
+name before adding any behaviour.
+
+### The prefab is frozen, so builder changes do not reach the game
+
+Learned 2026-08-08, immediately after a green suite lied about it. **The shop the player
+walks around is a PREFAB INSTANCE that `WorkshopBootstrap` ADOPTS rather than rebuilds.**
+So a fixture added to `WorkshopBuilder` appears in a freshly-built shop and **never** in the
+authored one: the prefab was saved before the new part existed, and the only way to refresh
+it is to re-author the room, which throws away the layout the prefab is there to keep.
+
+This produced a false green with exactly the shape the canon already warns about for staged
+cameras. Seven new PlayMode tests passed — they build their own shop via `WorkshopBootstrap`
+on a bare GameObject, which has no child controller to adopt, so it takes the code-built
+path. Probing the *running prefab shop* straight afterwards found no press readout and no
+seating handle. **A PlayMode test that builds its own shop does not test the authored one.**
+
+The repair is the canon's own rule pushed one step further: **a component must fit its own
+missing parts, not merely adopt them.** `LoadingPress` builds a readout if it has none;
+`SeatingStop` fits its own `SeatingHandle`. That works in all three shops — code-built,
+prefab-restored, hand-placed. Both are **runtime only** (`Application.isPlaying`), because
+creating objects in edit mode dirties the scene and turns every domain reload into a "save
+your changes?" dialog.
+
+When adding a fixture, ask which of the three shops it reaches. If the answer is only the
+code-built one, it is not built yet.
+
+### A TextMesh reads from its −Z side, not its +Z side
+
+Measured 2026-08-08, because the intuition is backwards and a wrong "fix" here would mirror
+every label in the shop. Rendering a glyph from both sides gives identical lit-pixel counts
+— `GUI/Text Shader` does not cull — and the glyphs land correctly **only from −Z**. So a
+`TextMesh`'s `forward` points AWAY from whoever is reading it.
+
+The player stands on the −Z side of the bench, so **the builder's unrotated labels are
+already correct**, and rotating one 180° to "face" the player is what mirrors it. An
+intermediate check that used `dot(forward, toEye) > 0` as the readable test had the sign
+inverted and briefly condemned all five bench readouts as mirrored; they are fine. If you
+touch label orientation, render it and count pixels rather than reasoning about it.
 
 ### And the verification rule that was learned the hard way
 

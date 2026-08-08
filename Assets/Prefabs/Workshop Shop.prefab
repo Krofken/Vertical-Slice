@@ -339,7 +339,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Gunsmith::Gunsmith.Interaction.StationView
   EyeOffset: {x: 0.03, y: 0.12, z: -0.16}
   LookOffset: {x: 0, y: 0, z: 0}
+  FrameTheWork: 1
+  Work: {fileID: 0}
+  Fill: 0.6
+  Loft: 0.55
   FieldOfView: 26
+  LabelClearance: 0.035
 --- !u!65 &2379934025351064316
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -398,7 +403,7 @@ MonoBehaviour:
   Pan: {fileID: 7197035690539264658}
   BeamReadout: {fileID: 1212191456280892214}
   _settingGrains: 5.5
-  _pouredGrains: 5.5
+  _pouredGrains: 0
 --- !u!1 &1284256117778009017
 GameObject:
   m_ObjectHideFlags: 0
@@ -1703,7 +1708,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Gunsmith::Gunsmith.Interaction.StationView
   EyeOffset: {x: 0, y: 0.11, z: -0.13}
   LookOffset: {x: 0, y: 0, z: 0}
+  FrameTheWork: 1
+  Work: {fileID: 0}
+  Fill: 0.6
+  Loft: 0.55
   FieldOfView: 18
+  LabelClearance: 0.035
 --- !u!65 &5565483269832737849
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -1812,7 +1822,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2913223152486794886}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0.07845911, y: 0, z: 0, w: 0.99691737}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -2952,7 +2962,7 @@ TextMesh:
     surface
     shrinks as it burns
 
-    coated'
+    2 passes in the drum'
   m_OffsetZ: 0
   m_CharacterSize: 0.0013
   m_LineSpacing: 1
@@ -3563,7 +3573,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 6970843326869386696}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 8ec273f937bd8464c91416bb22201559, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Gunsmith::Gunsmith.Range.RangeStation
   Rack: {fileID: 3481479535277593845}
@@ -4048,7 +4058,7 @@ TextMesh:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8028051963038413685}
-  m_Text: 5.5 gr
+  m_Text: 0.0 gr
   m_OffsetZ: 0
   m_CharacterSize: 0.0015
   m_LineSpacing: 1
@@ -4155,7 +4165,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Gunsmith::Gunsmith.Interaction.StationView
   EyeOffset: {x: 0, y: 0.13, z: -0.15}
   LookOffset: {x: 0, y: 0, z: 0}
+  FrameTheWork: 1
+  Work: {fileID: 0}
+  Fill: 0.6
+  Loft: 0.55
   FieldOfView: 24
+  LabelClearance: 0.035
 --- !u!65 &6920366837900420585
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -4212,9 +4227,14 @@ MonoBehaviour:
   MinimumWeb: 0.00002
   MaximumWeb: 0.0005
   GrainTray: {fileID: 8174346139907744765}
-  SampleGrains: 24
+  HeapDiameter: 0.05
+  PowderVolume: 0.0000003
+  MaxGrains: 900
+  MinGrains: 200
+  PileSpread: 1.35
   GrainMaterial: {fileID: 2100000, guid: d8d86612d1a88554d9701d2542dbc363, type: 2}
   Readout: {fileID: 4351199874207961740}
+  DrumPasses: 6
 --- !u!1 &8869791482239049233
 GameObject:
   m_ObjectHideFlags: 0
@@ -4395,7 +4415,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Gunsmith::Gunsmith.Interaction.StationView
   EyeOffset: {x: 0, y: 0.1, z: -0.12}
   LookOffset: {x: 0, y: 0, z: 0}
+  FrameTheWork: 1
+  Work: {fileID: 0}
+  Fill: 0.6
+  Loft: 0.55
   FieldOfView: 18
+  LabelClearance: 0.035
 --- !u!65 &14496612087400212
 BoxCollider:
   m_ObjectHideFlags: 0
