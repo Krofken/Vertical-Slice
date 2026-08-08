@@ -308,44 +308,13 @@ namespace Gunsmith.Interaction
 
             mill.Readout = Label(go.transform, "Mill readout", new Vector3(0f, 0.045f, 0f), 0.0013f);
 
-            // THE THREE THINGS THE MILL MAKES, each on something you can work. Before these
-            // the station was a readout with no inputs: SetWeb, SetDeterrent and NextShape were
-            // reachable only from the builder and the tests, so a player could look at a recipe
-            // and change nothing about it.
-            // Each slide gets a TRACK. The control places itself along it from the mill's
-            // current value, so where it sits always states what it is set to.
-            var grindTrack = new Vector3(-0.062f, 0.014f, 0.052f);
-            var wheel = Primitive(PrimitiveType.Sphere, go.transform, "Grinding wheel",
-                grindTrack, Vector3.one * 0.014f, Mat(_palette?.Metal, Defaults.Metal));
-            Control(wheel, mill, go.transform, MillAdjustment.Grind, grindTrack, travel: 0.124f);
-
-            var drumTrack = new Vector3(0.062f, 0.014f, -0.045f);
-            var drum = Primitive(PrimitiveType.Sphere, go.transform, "Coating drum",
-                drumTrack, Vector3.one * 0.014f, Mat(_palette?.Poise, Defaults.Poise));
-            Control(drum, mill, go.transform, MillAdjustment.Drum, drumTrack, travel: 0.090f);
-
-            var diePlate = new Vector3(0f, 0.014f, -0.058f);
-            var die = Primitive(PrimitiveType.Cube, go.transform, "Extrusion die",
-                diePlate, new Vector3(0.020f, 0.007f, 0.020f),
-                Mat(_palette?.Fixture, Defaults.Fixture));
-            Control(die, mill, go.transform, MillAdjustment.Die, diePlate, travel: 0f);
+            // THE REFINER IS FITTED BY PropellantMill ITSELF, for the same reason the
+            // dispenser is: this builder never runs for the authored prefab shop.
 
             mill.SetShape(GrainShape.Sphere);
             mill.SetWeb(3.5e-5);
             mill.SetDeterrent(0.3);
             return mill;
-        }
-
-        private static void Control(
-            GameObject go, PropellantMill mill, Transform rig, MillAdjustment adjustment,
-            Vector3 trackStart, float travel)
-        {
-            var control = go.AddComponent<MillControl>();
-            control.Adjustment = adjustment;
-            control.Mill = mill;
-            control.Rig = rig;
-            control.TrackStart = trackStart;
-            control.Travel = travel;
         }
 
         private PowderBalance BuildBalance(Transform parent)

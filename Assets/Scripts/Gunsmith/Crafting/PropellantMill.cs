@@ -196,85 +196,73 @@ namespace Gunsmith.Crafting
         }
 
         /// <summary>
-        /// Fits the mill's three controls if it has none.
+        /// Fits the refiner if the mill has none.
         ///
-        /// The authored shop is a frozen prefab that <c>WorkshopBootstrap</c> adopts rather
-        /// than rebuilds, so controls added to <c>WorkshopBuilder</c> would only ever appear in
-        /// a freshly-built shop and never in the game the player opens. Same repair as the
-        /// press's readout, the die's handle and the powder tin.
+        /// Self-fitting because the authored shop is a frozen prefab the bootstrap ADOPTS rather
+        /// than rebuilds, so anything only the builder knows about never reaches the game being
+        /// played. That has now caught the press's readout, the die's handle, the granule material
+        /// and the charge dispenser, so it is the default assumption.
         ///
-        /// RUNTIME ONLY — this is <c>[ExecuteAlways]</c>, and creating objects in edit mode
-        /// dirties the scene, which turns every domain reload into a save prompt.
+        /// RUNTIME ONLY -- this is [ExecuteAlways], and building objects in edit mode dirties the
+        /// scene, which turns every domain reload into a "save your changes?" dialog.
         /// </summary>
         private void EnsureControls()
         {
             if (!Application.isPlaying) return;
-            if (GetComponentInChildren<MillControl>(true) != null) return;
+            if (GetComponentInChildren<PowderRefiner>(true) != null) return;
 
-            // Tracks run clear of the pan so a control is never buried in the powder, and
-            // wide enough that the whole range is a comfortable sweep rather than a twitch.
-            Fit(MillAdjustment.Grind, "Grinding wheel",
-                new Vector3(-0.062f, 0.014f, 0.052f), Vector3.one * 0.014f, travel: 0.124f);
+            var machine = new GameObject("Powder refiner");
+            machine.transform.SetParent(transform, false);
+            machine.transform.localPosition = new Vector3(0f, 0f, 0.075f);
 
-            Fit(MillAdjustment.Drum, "Coating drum",
-                new Vector3(0.062f, 0.014f, -0.045f), Vector3.one * 0.014f, travel: 0.090f);
+            var refiner = machine.AddComponent<PowderRefiner>();
+            refiner.Mill = this;
 
-            Fit(MillAdjustment.Die, "Extrusion die",
-                new Vector3(0f, 0.014f, -0.058f), new Vector3(0.020f, 0.007f, 0.020f), travel: 0f);
-        }
+            const float face = -0.0215f;
 
-        private void Fit(MillAdjustment adjustment, string name, Vector3 position, Vector3 scale,
-            float travel)
-        {
-            var go = GameObject.CreatePrimitive(
-                adjustment == MillAdjustment.Die ? PrimitiveType.Cube : PrimitiveType.Sphere);
+            refiner.Glass = BenchScreen.Cabinet(machine.transform,
+                new Vector3(0f, 0.036f, 0.014f), new Vector3(0.130f, 0.072f, 0.070f), face);
 
-            go.name = name;
-            go.transform.SetParent(transform, false);
-            go.transform.localPosition = position;
-            go.transform.localScale = scale;
+            refiner.Labels = BenchScreen.Column(machine.transform, "Labels",
+                TextAnchor.UpperLeft, TextAlignment.Left);
 
-            if (GrainMaterial != null) go.GetComponent<MeshRenderer>().sharedMaterial = GrainMaterial;
+            refiner.Values = BenchScreen.Column(machine.transform, "Values",
+                TextAnchor.UpperRight, TextAlignment.Right);
 
-            var control = go.AddComponent<MillControl>();
-            control.Adjustment = adjustment;
-            control.Mill = this;
-            control.Rig = transform;
-            control.TrackStart = position;
-            control.Travel = travel;
-        }
+            // ROW, then LESS and MORE, then PRESS. Selecting a row and changing it are separate
+            // because four properties would otherwise need eight buttons on a machine this size.
+            refiner.RowButton = BenchScreen.Button(machine.transform, "Row", "▼",
+                new Vector3(-0.050f, 0.013f, face), new Color(0.45f, 0.50f, 0.60f));
 
-        /// <summary>
-        /// Unity forbids DestroyImmediate inside OnValidate, so the tray cannot be torn
-        /// down here. Flag it and let Update do it a frame later — the readout is safe
-        /// to update immediately either way.
-        /// </summary>
-        private void OnValidate()
-        {
-            RefreshReadout();
-            _trayDirty = true;
-        }
+            refiner.LessButton = BenchScreen.Button(machine.transform, "Less", "◀",
+                new Vector3(-0.024f, 0.013f, face), new Color(0.55f, 0.75f, 0.95f));
 
-        private void Update()
-        {
-            if (!_trayDirty) return;
+            refiner.MoreButton = BenchScreen.Button(machine.transform, "More", "▶",
+                new Vector3(0.002f, 0.013f, face), new Color(0.55f, 0.75f, 0.95f));
 
-            _trayDirty = false;
-            RebuildTray();
+            refiner.RefineButton = BenchScreen.Button(machine.transform, "Refine", "PRESS",
+                new Vector3(0.042f, 0.013f, face), new Color(0.85f, 0.65f, 0.30f));
+
+            refiner.Refresh();
+
+            var interactable = GetComponent<Interaction.Interactable>();
+            if (interactable != null) interactable.Prompt = "refine the powder";
         }
 
         // ------------------------------------------------------------------
+        // What the refiner presses. These are the mill's actual settings; the machine at the
+        // station composes a recipe and then calls them, which is why they take a value rather
+        // than stepping one.
+        // ------------------------------------------------------------------
 
-        /// <summary>Presses the grains finer or coarser. Bound to a draggable gauge, so
-        /// grain size is set by moving a tool.</summary>
+        /// <summary>Presses the granules finer or coarser.</summary>
         public void SetWeb(double metres) => WebThickness = metres;
 
-        /// <summary>Runs the batch through the coating drum. More passes, more
-        /// deterrent.</summary>
+        /// <summary>Runs the batch through the coating drum. More passes, more deterrent.</summary>
         public void SetDeterrent(double fraction) => DeterrentCoating = fraction;
 
-        /// <summary>Swaps the extrusion die. Discrete, so it is a selection rather than
-        /// a drag — there is no halfway between a sphere and a flake.</summary>
+        /// <summary>Fits a different extrusion die. Discrete — there is no halfway between a
+        /// sphere and a flake.</summary>
         public void SetShape(GrainShape shape) { Shape = shape; Refresh(); }
 
         /// <summary>Cycles to the next die, for a single-button control.</summary>
@@ -301,8 +289,8 @@ namespace Gunsmith.Crafting
             design.DeterrentCoating = _deterrentCoating;
         }
 
-        /// <summary>Sets the mill up from an existing load, so opening a saved design
-        /// puts the tools where that design left them.</summary>
+        /// <summary>Sets the mill up from an existing load, so opening a saved design puts the
+        /// tools where that design left them.</summary>
         public void ReadFrom(in CartridgeDesign design)
         {
             BaseId = design.PropellantId;
@@ -311,8 +299,6 @@ namespace Gunsmith.Crafting
             _deterrentCoating = Clamp(design.DeterrentCoating, 0.0, 1.0);
             Refresh();
         }
-
-        // ------------------------------------------------------------------
 
         private void Refresh()
         {
